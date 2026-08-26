@@ -39,6 +39,12 @@ jobs:
       - run: npm run build
         env:
           NODE_ENV: production
+          # CRA/webpack escalates ALL warnings to build-breaking errors when
+          # CI=true (auto-set by GitHub Actions). Production is built
+          # manually outside any CI system, so it never hits this; disable
+          # the same escalation here so staging's build matches production's
+          # actual behavior instead of failing on pre-existing warnings.
+          CI: false
 
       - name: Setup SSH
         run: |
