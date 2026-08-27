@@ -375,8 +375,12 @@ return (
           const messages = chat.description || [];
           const latest = messages[messages.length - 1];
 
-          const cleanMessage =
-            latest?.message?.replace(/<[^>]+>/g, "") || "";
+          // Stripping tags with a regex leaves HTML entities (e.g.
+          // "&nbsp;") visible as literal text; parse and read
+          // .textContent instead so entities are decoded correctly.
+          const cleanMessage = latest?.message
+            ? new DOMParser().parseFromString(latest.message, "text/html").body.textContent.trim()
+            : "";
 
           const sender =
             latest?.fromwhome === "client"
