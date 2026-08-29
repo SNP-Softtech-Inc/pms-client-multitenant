@@ -177,12 +177,35 @@ const attachInterceptors = (api) => {
       if (error.response?.status === 401 && !originalRequest?._retry) {
         originalRequest._retry = true;
 
-        // ✅ CLEAR SESSION STORAGE (NOT localStorage)
-        sessionStorage.clear();
+        // There's no refresh-token flow here, so a 401 used to always be
+        // treated as "the whole session is over" and force a hard logout
+        // immediately - even if the token was still genuinely valid for
+        // its full configured duration (e.g. the selected 2-hour
+        // session), and the 401 was actually caused by something else
+        // (a transient backend hiccup, a specific endpoint's own check).
+        // Only end the session if the token itself has actually expired.
+        const token = sessionStorage.getItem("token");
+        let tokenActuallyExpired = true;
 
-        // ✅ Prevent loop
-        if (!window.location.pathname.includes("/login")) {
-          window.location.href = "/login";
+        if (token) {
+          try {
+            const decoded = JSON.parse(atob(token.split(".")[1]));
+            if (decoded.exp && decoded.exp * 1000 > Date.now()) {
+              tokenActuallyExpired = false;
+            }
+          } catch (e) {
+            // Malformed/undecodable token - treat as expired.
+          }
+        }
+
+        if (tokenActuallyExpired) {
+          // ✅ CLEAR SESSION STORAGE (NOT localStorage)
+          sessionStorage.clear();
+
+          // ✅ Prevent loop
+          if (!window.location.pathname.includes("/login")) {
+            window.location.href = "/login";
+          }
         }
       }
 
