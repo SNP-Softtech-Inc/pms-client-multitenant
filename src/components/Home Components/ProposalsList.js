@@ -158,7 +158,7 @@ useEffect(() => {
                     <FileText size={11} className="text-amber-400 shrink-0" />
                     <p className="text-[12px] font-semibold text-foreground">Review and Sign</p>
                   </div>
-                  <p className="text-[12px] text-muted-foreground truncate mt-0.5">{proposal.general.proposalName}</p>
+                  <p className="text-[12px] text-muted-foreground truncate mt-0.5">{proposal.general?.proposalName}</p>
                 </div>
                 <ArrowRight size={13} className="shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>

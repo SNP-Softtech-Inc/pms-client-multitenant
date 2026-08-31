@@ -103,7 +103,7 @@
 //                   sx={{ cursor: "pointer" }}
 //                   onClick={() => handleOpenDialog(row)}
 //                 >
-//                   {row.general.proposalName || "Untitled"}
+//                   {row.general?.proposalName || "Untitled"}
 //                 </Typography>
 //               </Tooltip>
 //             </TableCell>
@@ -287,7 +287,7 @@ const toast=useToast()
   //                         title="View Details"
   //                         className="font-medium text-foreground group-hover:text-primary transition-colors"
   //                       >
-  //                         {row.general.proposalName || "Untitled"}
+  //                         {row.general?.proposalName || "Untitled"}
   //                       </span>
   //                     </td>
 
@@ -448,7 +448,7 @@ const toast=useToast()
                           transition-colors
                         "
                       >
-                        {row.general.proposalName || "Untitled"}
+                        {row.general?.proposalName || "Untitled"}
                       </span>
                     </td>
 
