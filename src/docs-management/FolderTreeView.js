@@ -53,6 +53,10 @@ import {
   TrashIcon,
   ArrowDownTrayIcon,
   DocumentArrowUpIcon,
+  ArrowTopRightOnSquareIcon,
+  InformationCircleIcon,
+  DocumentDuplicateIcon,
+  ShareIcon,
 } from "@heroicons/react/24/outline";
 import { useToast } from "../hooks/useToast";
 import {
@@ -1257,6 +1261,21 @@ const handleBulkDownload = async () => {
       case 'download':
         handleDownloadFile(item);
         break;
+
+      case 'openNewWindow': {
+        // Word/Excel can't be rendered natively by the browser, so opening
+        // the raw file URL directly just forces a download instead of a
+        // preview - route those extensions through the Office Online
+        // embed viewer instead, same as the raw-file case for pdf/images.
+        const fileUrl = `${process.env.REACT_APP_FOLDER_MANAGEMENT}/uploads/accounts/${item.path}`;
+        const officeExts = ["doc", "docx", "xls", "xlsx", "xlsm", "xlsb"];
+        const itemExt = item.name?.toLowerCase().split(".").pop() || "";
+        const newWindowUrl = officeExts.includes(itemExt)
+          ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`
+          : fileUrl;
+        window.open(newWindowUrl, "_blank", "noopener,noreferrer");
+        break;
+      }
       
       case 'delete':
         trashItem(item);
@@ -1339,6 +1358,12 @@ const handleBulkDownload = async () => {
           icon: DocumentDuplicateIcon,
           action: 'open',
           shortcut: '⌘+O',
+          disabled: isLocked,
+        },
+        {
+          name: 'Open in New Window',
+          icon: ArrowTopRightOnSquareIcon,
+          action: 'openNewWindow',
           disabled: isLocked,
         },
         {
@@ -1589,6 +1614,7 @@ const handleBulkDownload = async () => {
             style={{
               cursor: meta.readOnly ? "not-allowed" : "pointer",
             }}
+            onContextMenu={(e) => handleContextMenu(e, item)}
           >
             {/* CHECKBOX */}
             <td className="px-5 py-4 w-[60px] align-middle">
@@ -2182,6 +2208,18 @@ const handleBulkDownload = async () => {
           )}
         </div>
       </div>
+
+      {/* ================= RIGHT-CLICK CONTEXT MENU ================= */}
+      {contextMenu.visible && contextMenu.item && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems(contextMenu.item)}
+          onClose={closeContextMenu}
+          onAction={handleContextMenuAction}
+          fileName={contextMenu.item?.name}
+        />
+      )}
 
       {/* ================= DOCUMENT APPROVAL DIALOG ================= */}
       {openViewer && (
