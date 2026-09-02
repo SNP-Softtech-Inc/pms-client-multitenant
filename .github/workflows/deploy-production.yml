@@ -1,0 +1,70 @@
+# .github/workflows/deploy-production.yml
+# main branch -> production server, served at /client
+# Mirrors deploy-staging.yml exactly, targeting production path/domain/vars.
+
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+
+env:
+  DEPLOY_PATH: /var/www/pmsClient/build
+  BUILD_DIR: build
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: 'npm'
+
+      - name: Create .env from production variables
+        env:
+          ENV_PRODUCTION: ${{ vars.ENV_PRODUCTION }}
+        run: |
+          rm -f .env
+          printf '%s\n' "$ENV_PRODUCTION" > .env
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          NODE_ENV: production
+          # CRA/webpack escalates ALL warnings to build-breaking errors when
+          # CI=true (auto-set by GitHub Actions). Production is built
+          # manually outside any CI system, so it never hits this; disable
+          # the same escalation here so this build matches production's
+          # actual behavior instead of failing on pre-existing warnings.
+          CI: false
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+      - name: Ensure remote deploy directory exists
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectionAttempts=3 \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p $DEPLOY_PATH"
+
+      - name: Upload build to server
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectionAttempts=3" \
+            ./$BUILD_DIR/ \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$DEPLOY_PATH/
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
