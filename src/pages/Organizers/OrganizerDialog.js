@@ -567,7 +567,18 @@ const addRepeatedSection = (sectionId) => {
   );
 
   const getVisibleSections = () => {
-    const currentlyVisible = (sections || []).filter(shouldShowSection);
+    // Once a repeated section is saved, it comes back from the server
+    // sitting inside `sections` as its own entry (sectionsettings.isRepeated
+    // true), in addition to the separately-persisted `repeatedSections` map
+    // that also points at it. Without this filter, the loop below would
+    // push it once here as if it were an original section, and a second
+    // time from the repeatedSections[section.id] loop - doubling on every
+    // reopen/save cycle. Repeats are always rebuilt fresh from the true
+    // original section below, so already-flattened repeat entries must be
+    // excluded from the "original sections" pass entirely.
+    const currentlyVisible = (sections || [])
+      .filter((section) => !section?.sectionsettings?.isRepeated)
+      .filter(shouldShowSection);
     const allSections = [];
 
     currentlyVisible.forEach((section) => {
@@ -697,8 +708,17 @@ const addRepeatedSection = (sectionId) => {
   //   return data;
   // };
 const prepareSubmitData = (finalSubmit = false) => {
-  // Get ALL sections from the organizer
-  const allSections = organizer?.sections || [];
+  // Get ALL sections from the organizer, excluding already-flattened repeat
+  // instances from a prior save - those come back from the server sitting
+  // directly in organizer.sections (sectionsettings.isRepeated true), and
+  // repeatedSections[section.id] below would push a fresh copy of the same
+  // repeat on top of it, doubling the section on every save/reopen cycle
+  // (and bloating the payload enough to trip the server's body-size limit).
+  // Repeats are always rebuilt fresh below from the true original section's
+  // template, so stale flattened repeat entries must be excluded here.
+  const allSections = (organizer?.sections || []).filter(
+    (section) => !section?.sectionsettings?.isRepeated,
+  );
 
   const sectionsData = [];
 
