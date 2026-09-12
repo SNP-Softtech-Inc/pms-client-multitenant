@@ -121,8 +121,13 @@ export default function Navbar() {
       <div className="flex items-center justify-between">
         {/* LEFT */}
         <div className="flex items-center gap-6">
-          {/* Logo */}
-          <img src={Logo} className="h-9 object-contain" />
+          {/* Logo - navigates home */}
+          <img
+            src={Logo}
+            alt="SNP Tax & Financials - go to Home"
+            onClick={() => navigate("/home")}
+            className="h-9 cursor-pointer object-contain"
+          />
 
           {/* MENU */}
           <div className="flex items-center gap-1">
@@ -223,7 +228,7 @@ export default function Navbar() {
             {dropdownOpen && (
               <div
                 className="
-              absolute right-0 mt-2 w-56
+              absolute right-0 mt-2 w-72 max-w-[calc(100vw-2rem)]
               bg-popover text-popover-foreground
               border border-border
               rounded-xl shadow-md overflow-hidden
@@ -231,7 +236,7 @@ export default function Navbar() {
               >
                 {/* USER INFO */}
                 <div className="px-4 py-3 border-b border-border flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+                  <div className="w-8 h-8 shrink-0 rounded-full overflow-hidden bg-muted flex items-center justify-center">
                     {accountInfo?.profilePicture ? (
                       <img
                         src={`${process.env.REACT_APP_ACCOUNT_CONTACT}/${accountInfo.profilePicture}`}
@@ -246,11 +251,21 @@ export default function Navbar() {
                     )}
                   </div>
 
-                  <div>
-                    <p className="font-medium text-sm">
+                  {/* min-w-0 + truncate keep a long email inside the dropdown
+                      instead of forcing it wider and being clipped */}
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="font-medium text-sm truncate"
+                      title={accountInfo?.accountName || "User"}
+                    >
                       {accountInfo?.accountName || "User"}
                     </p>
-                    <p className="text-xs text-muted-foreground">{email}</p>
+                    <p
+                      className="text-xs text-muted-foreground truncate"
+                      title={email || ""}
+                    >
+                      {email}
+                    </p>
                   </div>
                 </div>
                 {/* SWITCH ACCOUNT */}

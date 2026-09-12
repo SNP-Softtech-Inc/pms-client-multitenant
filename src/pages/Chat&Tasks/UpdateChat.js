@@ -8,7 +8,11 @@ import { useToast } from "../../hooks/useToast";
 import { Check, CheckCheck ,MoveLeft} from "lucide-react";
 import TextEditor from "../../TextEditor/TextEditor";
 
-const UpdateChat = () => {
+// Also rendered as the right-hand pane of the Chats & Tasks page, where the
+// chat id arrives as a prop instead of a route param and the back button
+// isn't needed (the thread list is already on screen). Used standalone at
+// /updatechat/:_id the props are simply absent and nothing changes.
+const UpdateChat = ({ chatId: chatIdProp, embedded = false }) => {
   const [accId] = useState(sessionStorage.getItem("accountId"));
   const toast = useToast()
   // Edit state
@@ -34,7 +38,8 @@ const UpdateChat = () => {
 
   const messageRefs = useRef({});
   const [highlightedId, setHighlightedId] = useState(null);
-  const { _id } = useParams();
+  const { _id: routeChatId } = useParams();
+  const _id = chatIdProp || routeChatId;
 
   const [time, setTime] = useState();
   const [chatsubject, setChatSubject] = useState("");
@@ -438,7 +443,13 @@ const handleBack = () => {
   navigate(-1); // Navigate back to the previous page
 };
 return (
-  <div className="w-full max-w-[1700px] flex-1 h-[90vh] p-2 flex flex-col md:flex-row gap-4 overflow-hidden bg-background">
+  <div
+    className={
+      embedded
+        ? "w-full flex-1 min-h-0 h-full flex flex-col md:flex-row gap-4 overflow-hidden bg-background"
+        : "w-full max-w-[1700px] flex-1 h-[90vh] p-2 flex flex-col md:flex-row gap-4 overflow-hidden bg-background"
+    }
+  >
 
     {/* Edit message modal */}
     {editDialogOpen && (
@@ -532,13 +543,15 @@ return (
       {/* Chat header */}
     <div className="shrink-0 px-4 py-3 border-b border-border bg-muted/30">
   <h2 className="flex items-center gap-2 text-base font-semibold text-foreground truncate">
-    <button
-      type="button"
-      onClick={handleBack} // Your function here
-      className="cursor-pointer hover:text-primary transition-colors"
-    >
-      <MoveLeft size={30} />
-    </button>
+    {!embedded && (
+      <button
+        type="button"
+        onClick={handleBack}
+        className="cursor-pointer hover:text-primary transition-colors"
+      >
+        <MoveLeft size={30} />
+      </button>
+    )}
 
     {chatsubject || "Chat"}
   </h2>
@@ -700,7 +713,7 @@ return (
           {/* Message */}
           <div
             // className="text-sm prose prose-sm max-w-none"
-             className="text-sm leading-relaxed break-words whitespace-pre-wrap"
+             className="chat-rich-text text-sm leading-relaxed break-words whitespace-pre-wrap"
             dangerouslySetInnerHTML={{
               __html:
                 typeof desc.message ===

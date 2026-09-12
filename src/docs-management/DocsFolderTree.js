@@ -1741,8 +1741,10 @@ const DocsFolderTree = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Header */}
-          <div className="bg-white/80 backdrop-blur-xl border border-white/30 rounded-3xl shadow-xl p-6">
+          {/* Header - sticks below the fixed navbar (Dashboard offsets its
+              content by pt-16) so Create Folder / Upload File / Upload Folder
+              / Trash stay reachable while scrolling a long folder list */}
+          <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-xl border border-white/30 rounded-3xl shadow-xl p-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
