@@ -587,9 +587,48 @@ const TrashedDocs = () => {
     const [deleteConfirmText, setDeleteConfirmText] = useState("");
     const [itemToDelete, setItemToDelete] = useState(null);
   const [accountName, setAccountName] = useState("");
+    // Bulk selection. itemToDelete stays null for a bulk delete, which is how
+    // the shared confirmation dialog tells the two flows apart.
+    const [selectedPaths, setSelectedPaths] = useState(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+
     useEffect(() => {
       fetchFolderTree(accountId);
     }, [accountId]);
+
+    // Every path in the tree, parents and children alike, so "select all"
+    // covers rows hidden inside collapsed folders too.
+    const flattenPaths = (items) =>
+      items.flatMap((item) => [
+        item.path,
+        ...(item.children ? flattenPaths(item.children) : []),
+      ]);
+
+    const allPaths = flattenPaths(folderTree);
+    const allSelected =
+      allPaths.length > 0 && allPaths.every((p) => selectedPaths.has(p));
+
+    const toggleSelected = (path) => {
+      setSelectedPaths((prev) => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+    };
+
+    const toggleSelectAll = () => {
+      setSelectedPaths((prev) =>
+        prev.size === allPaths.length ? new Set() : new Set(allPaths),
+      );
+    };
+
+    // Removing a folder covers everything inside it, so sending a child as
+    // well would report a failure for something already dealt with.
+    const collapseToTopLevel = (paths) =>
+      paths.filter(
+        (path) => !paths.some((other) => path.startsWith(`${other}/`)),
+      );
 
     const fetchFolderTree = async (accountId) => {
       try {
@@ -698,6 +737,13 @@ const TrashedDocs = () => {
         const data = res.data;
         if (res.status === 200 && data.success) {
           toast.success(data.message || "Deleted successfully");
+          // Drop it from the selection too, so the count cannot keep
+          // referring to something that is already gone.
+          setSelectedPaths((prev) => {
+            const next = new Set(prev);
+            next.delete(item.path);
+            return next;
+          });
           setTimeout(() => {
             fetchFolderTree(accountId);
           }, 500);
@@ -709,6 +755,49 @@ const TrashedDocs = () => {
         toast.error("Error deleting file or folder");
       }
       handleMenuClose();
+    };
+
+    const bulkDeleteSelected = async () => {
+      // Guard against a second request while the first is still running.
+      if (bulkDeleting || selectedPaths.size === 0) return;
+
+      const paths = collapseToTopLevel(Array.from(selectedPaths));
+
+      setBulkDeleting(true);
+      try {
+        // Sent one at a time on purpose. The client-side delete only marks an
+        // item as hidden from the client - the firm keeps its copy - and there
+        // is no bulk form of that endpoint. bulkDeleteItems exists in this
+        // repo's api.js but is the admin's permanent delete, which would
+        // destroy the firm's documents rather than hide them.
+        const results = await Promise.allSettled(
+          paths.map((targetPath) =>
+            accountDocsAPI
+              .deleteItemByClient({ targetPath, accountId, accountName })
+              .then((res) => {
+                if (!res?.data?.success) throw new Error(res?.data?.message);
+                return targetPath;
+              }),
+          ),
+        );
+
+        const failed = results.filter((r) => r.status === "rejected").length;
+        const deleted = paths.length - failed;
+
+        if (failed > 0) {
+          toast.error(`${deleted} of ${paths.length} item(s) deleted`);
+        } else {
+          toast.success(`${deleted} item(s) deleted`);
+        }
+
+        setSelectedPaths(new Set());
+        await fetchFolderTree(accountId);
+      } catch (err) {
+        console.error("Bulk delete failed:", err);
+        toast.error("Failed to delete the selected items");
+      } finally {
+        setBulkDeleting(false);
+      }
     };
 
     const getFileIcon = (fileName) => {
@@ -784,6 +873,15 @@ const TrashedDocs = () => {
         return (
           <React.Fragment key={fullPath}>
             <tr className={`${level % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-gray-100`}>
+              <td className="py-3 px-4 border-b border-gray-200 w-[48px]">
+                <input
+                  type="checkbox"
+                  checked={selectedPaths.has(item.path)}
+                  onChange={() => toggleSelected(item.path)}
+                  aria-label={`Select ${item.name}`}
+                  className="h-4 w-4 cursor-pointer accent-blue-600"
+                />
+              </td>
               <td className={`py-3 px-4 border-b border-gray-200`}>
                 <div className="flex items-center" style={{ paddingLeft: `${level * 24}px` }}>
                   {isFolder ? (
@@ -856,11 +954,55 @@ const TrashedDocs = () => {
             </p>
           </div>
 
+          {/* Selection bar - only present once something is selected, so the
+              destructive action stays out of the way during normal browsing. */}
+          {selectedPaths.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <span className="text-sm font-medium text-gray-800">
+                {selectedPaths.size} item
+                {selectedPaths.size === 1 ? "" : "s"} selected
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedPaths(new Set())}
+                  disabled={bulkDeleting}
+                  className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Clear selection
+                </button>
+
+                <button
+                  onClick={() => {
+                    // A null itemToDelete marks this as a bulk delete when
+                    // the shared dialog is confirmed.
+                    setItemToDelete(null);
+                    setDeleteConfirmText("");
+                    setDeleteDialogOpen(true);
+                  }}
+                  disabled={bulkDeleting}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Delete Permanently ({selectedPaths.size})
+                </button>
+              </div>
+            </div>
+          )}
+
           {folderTree && folderTree.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead className="bg-gray-100">
                   <tr>
+                    <th className="py-3 px-4 w-[48px] border-b border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all trashed items"
+                        className="h-4 w-4 cursor-pointer accent-blue-600"
+                      />
+                    </th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700 border-b border-gray-200">
                       Name
                     </th>
@@ -944,7 +1086,11 @@ const TrashedDocs = () => {
                     Type <strong>DELETE</strong> to confirm permanent deletion of:
                   </p>
                   <p className="text-sm font-semibold text-gray-900 mb-4">
-                    {itemToDelete?.name}
+                    {itemToDelete
+                      ? itemToDelete.name
+                      : `${selectedPaths.size} selected item${
+                          selectedPaths.size === 1 ? "" : "s"
+                        } — any folder takes its contents with it`}
                   </p>
                   
                   <input
@@ -974,20 +1120,28 @@ const TrashedDocs = () => {
                     Cancel
                   </button>
                   <button
-                    disabled={deleteConfirmText !== "DELETE"}
+                    disabled={deleteConfirmText !== "DELETE" || bulkDeleting}
                     onClick={async () => {
-                      await deleteItem(itemToDelete);
+                      if (itemToDelete) {
+                        await deleteItem(itemToDelete);
+                      } else {
+                        await bulkDeleteSelected();
+                      }
                       setDeleteDialogOpen(false);
                       setItemToDelete(null);
                       setDeleteConfirmText("");
                     }}
                     className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
-                      deleteConfirmText === "DELETE"
+                      deleteConfirmText === "DELETE" && !bulkDeleting
                         ? "bg-red-600 hover:bg-red-700"
                         : "bg-red-300 cursor-not-allowed"
                     }`}
                   >
-                    Delete Permanently
+                    {bulkDeleting
+                      ? "Deleting..."
+                      : itemToDelete
+                        ? "Delete Permanently"
+                        : `Delete Permanently (${selectedPaths.size})`}
                   </button>
                 </div>
               </div>
