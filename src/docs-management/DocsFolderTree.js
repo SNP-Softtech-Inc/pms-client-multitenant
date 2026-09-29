@@ -56,6 +56,7 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   TrashIcon,
+  ArrowTopRightOnSquareIcon,
   ArrowDownTrayIcon,
   DocumentArrowUpIcon, // Alternative for file upload
   // FolderOpenIcon        // Alternative for folder upload
@@ -1071,6 +1072,17 @@ const DocsFolderTree = () => {
         const isLocked = item.meta?.readOnly === true;
         return [
           {
+            // Opening a document previously meant clicking the row, which
+            // takes over the current page. This gives an explicit way to
+            // send it to its own tab and keep what you were looking at.
+            name: "Open in New Tab",
+            icon: ArrowTopRightOnSquareIcon,
+            action: "openInNewTab",
+            disabled: isLocked,
+            color: "text-blue-600",
+          },
+          { separator: true },
+          {
             name: "Rename",
             icon: PencilIcon,
             action: "rename",
@@ -1194,6 +1206,15 @@ const DocsFolderTree = () => {
           break;
         case "download":
           handleDownloadFile(selectedItemForPopover);
+          break;
+        case "openInNewTab":
+          // Called straight from the menu click with no await in between, so
+          // the browser still treats it as user-initiated and does not block
+          // the new tab.
+          openDocument(
+            selectedItemForPopover.path,
+            selectedItemForPopover.name,
+          );
           break;
         case "uploadFile":
           setFileUploadDrawerOpen(true);
