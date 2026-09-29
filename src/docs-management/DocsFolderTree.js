@@ -43,7 +43,7 @@ import {
   invoiceAPI,
   esignAPI,
 } from "../services/api";
-import { X } from "lucide-react";
+import { X, Maximize2, Minimize2 } from "lucide-react";
 import { CheckCircle2 } from "lucide-react";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import {
@@ -92,6 +92,9 @@ const DocsFolderTree = () => {
     const [selectedItemForPopover, setSelectedItemForPopover] = useState(null);
     const [folderTree, setFolderTree] = useState([]);
     const [openViewer, setOpenViewer] = useState(false);
+    // Full-screen toggle for the document preview. Resets on close so the
+    // next document opens at the normal size.
+    const [viewerMaximized, setViewerMaximized] = useState(false);
     const [selectedDoc, setSelectedDoc] = useState(null);
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [cancelReason, setCancelReason] = useState("");
@@ -872,6 +875,7 @@ const DocsFolderTree = () => {
     const handleCloseViewer = () => {
       setOpenViewer(false);
       setSelectedDoc(null);
+      setViewerMaximized(false);
     };
 
     const handleCancelClick = () => {
@@ -1962,8 +1966,21 @@ const DocsFolderTree = () => {
 
         {/* ================= DOCUMENT APPROVAL DIALOG ================= */}
         {openViewer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
-            <div className="w-full max-w-5xl bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden">
+          <div
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md ${
+              viewerMaximized ? "p-0" : "p-2 sm:p-4"
+            }`}
+          >
+            {/* Was capped at max-w-5xl with a 75vh frame, which left wide
+                margins on every side and a small document. Now uses most of
+                the viewport by default, and all of it when maximised. */}
+            <div
+              className={`w-full bg-white/90 backdrop-blur-2xl shadow-2xl border border-white/30 overflow-hidden ${
+                viewerMaximized
+                  ? "max-w-none h-full rounded-none"
+                  : "max-w-[92rem] rounded-3xl"
+              }`}
+            >
               <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="h-11 w-11 rounded-2xl bg-yellow-100 flex items-center justify-center">
@@ -1981,18 +1998,43 @@ const DocsFolderTree = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleCloseViewer}
-                  className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
-                >
-                  <X className="w-5 h-5 text-slate-600" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setViewerMaximized((v) => !v)}
+                    title={viewerMaximized ? "Exit full screen" : "Full screen"}
+                    aria-label={
+                      viewerMaximized ? "Exit full screen" : "Full screen"
+                    }
+                    className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
+                  >
+                    {viewerMaximized ? (
+                      <Minimize2 className="w-5 h-5 text-slate-600" />
+                    ) : (
+                      <Maximize2 className="w-5 h-5 text-slate-600" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleCloseViewer}
+                    className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
+                  >
+                    <X className="w-5 h-5 text-slate-600" />
+                  </button>
+                </div>
               </div>
 
-              <div className="h-[75vh] bg-slate-100">
+              <div
+                className={`bg-slate-100 ${
+                  viewerMaximized ? "h-[calc(100vh-5.5rem)]" : "h-[85vh]"
+                }`}
+              >
                 {selectedDoc ? (
                   <iframe
-                    src={selectedDoc.fileUrl}
+                    // #view=FitH tells the built-in PDF viewer to fit the page
+                    // to the frame width instead of letterboxing it.
+                    src={`${selectedDoc.fileUrl}${
+                      selectedDoc.fileUrl?.includes("#") ? "&" : "#"
+                    }view=FitH`}
                     title={selectedDoc.filename}
                     className="w-full h-full"
                   />

@@ -608,11 +608,25 @@ const TrashedDocs = () => {
     const allSelected =
       allPaths.length > 0 && allPaths.every((p) => selectedPaths.has(p));
 
+    // Ticking a folder ticks everything inside it. Removing a folder already
+    // takes its contents, so leaving the children visibly unchecked while
+    // they were about to go anyway was misleading. Paths are hierarchical,
+    // so a descendant is any path under "<folder>/".
+    const withDescendants = (path) => [
+      path,
+      ...allPaths.filter((p) => p.startsWith(`${path}/`)),
+    ];
+
     const toggleSelected = (path) => {
       setSelectedPaths((prev) => {
         const next = new Set(prev);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
+        const family = withDescendants(path);
+
+        // The clicked row decides the direction for the whole subtree, so a
+        // single click never leaves it half-toggled.
+        if (next.has(path)) family.forEach((p) => next.delete(p));
+        else family.forEach((p) => next.add(p));
+
         return next;
       });
     };
@@ -828,9 +842,13 @@ const TrashedDocs = () => {
       if (!meta?.trash?.trashedAt) return null;
 
       const trashedAt = new Date(meta.trash.trashedAt);
-      const now = new Date();
-      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-      const diffTime = trashedAt.getTime() + TWO_HOURS_MS - now.getTime();
+      if (isNaN(trashedAt.getTime())) return null;
+
+      // Retention is 60 days, as the banner above this table states. This
+      // counted against 2 hours, so a freshly trashed item read "1 hr 59 min
+      // left" and then sat on "Deleting soon" for the remaining 59 days.
+      const RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
+      const diffTime = trashedAt.getTime() + RETENTION_MS - Date.now();
 
       if (diffTime <= 0) {
         return (
@@ -841,8 +859,17 @@ const TrashedDocs = () => {
       }
 
       const remainingMinutes = Math.ceil(diffTime / (1000 * 60));
-      const hours = Math.floor(remainingMinutes / 60);
+      const days = Math.floor(remainingMinutes / (60 * 24));
+      const hours = Math.floor((remainingMinutes % (60 * 24)) / 60);
       const minutes = remainingMinutes % 60;
+
+      // Coarse while it is far off, precise as it gets close.
+      const remainingLabel =
+        days > 0
+          ? `${days} day${days === 1 ? "" : "s"} left`
+          : hours > 0
+            ? `${hours} hr${hours > 1 ? "s" : ""} ${minutes} min left`
+            : `${minutes} min left`;
 
       const formattedDate = trashedAt
         .toLocaleDateString("en-US", {
@@ -856,9 +883,7 @@ const TrashedDocs = () => {
 
       return (
         <span className="font-bold text-xs">
-          {formattedDate} (
-          {hours > 0 && `${hours} hr${hours > 1 ? "s" : ""} `}
-          {minutes > 0 && `${minutes} min${minutes > 1 ? "s" : ""}`} left)
+          {formattedDate} ({remainingLabel})
         </span>
       );
     };
