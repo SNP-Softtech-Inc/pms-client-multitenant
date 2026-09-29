@@ -1288,6 +1288,15 @@ const DocuSealMultiSigner = ({ accountId }) => {
 
                       handleCloseDialog();
                       fetchFolderTree();
+
+                      // Clients typically reach this page from the
+                      // signature-request email, which opens a new tab -
+                      // once they've signed there's nothing left for them
+                      // to do here, so close it for them. Browsers only
+                      // allow this on tabs with no back-history (i.e.
+                      // opened fresh, not navigated to); it's a no-op
+                      // otherwise, so it's safe to always attempt.
+                      window.close();
                     }}
                   />
           </div>

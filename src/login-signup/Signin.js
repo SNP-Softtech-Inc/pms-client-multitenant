@@ -329,18 +329,18 @@ import { useNavigate ,Link} from "react-router-dom";
 import { useContactAuth } from "../context/Context";
 import { useToast } from "../hooks/useToast";
 import { 
-  Eye, 
-  EyeOff, 
-  X, 
-  FileText, 
+  Eye,
+  EyeOff,
+  X,
   AlertCircle,
   CheckCircle,
   Building2,
   UserCircle,
   Mail,
   Lock,
-  ArrowRight,KeyRound 
+  ArrowRight,KeyRound
 } from "lucide-react";
+import snpLogo from "../Images/snplogo-removebg-preview.png";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -479,14 +479,41 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4">
-      {/* Main Login Card */}
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all duration-300">
-        {/* Logo and Header */}
+    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
+      {/* ================= LEFT: BRANDING ================= */}
+      {/* Mirrors the Admin/Team login split layout so both portals share the
+          same first impression. Hidden below md, where the form takes over. */}
+      <div className="relative hidden items-center justify-center overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-16 text-white md:flex">
+        <div className="pointer-events-none absolute -left-32 -top-32 h-[400px] w-[400px] rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-0 right-0 h-[500px] w-[500px] rounded-full bg-indigo-400/20 blur-3xl" />
+
+        <div className="relative max-w-md space-y-6 text-center">
+          <img
+            src={snpLogo}
+            alt="SNP Tax & Financials"
+            className="mx-auto mb-6 h-20 object-contain"
+          />
+          <h1 className="text-4xl font-semibold tracking-tight text-white">
+            Client Portal
+          </h1>
+          <p className="text-lg leading-relaxed text-white/90">
+            Welcome to SNP Tax &amp; Financials, where tax management meets
+            simplicity. Securely share documents, track your returns, and stay
+            in touch with your tax team - all in one place.
+          </p>
+        </div>
+      </div>
+
+      {/* ================= RIGHT: LOGIN FORM ================= */}
+      <div className="flex items-center justify-center bg-slate-50 p-4 sm:p-6">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl transition-all duration-300">
+        {/* Header - the logo shows on small screens, where the left panel is hidden */}
         <div className="text-center mb-8">
-          <div className="mx-auto w-20 h-20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mb-5 shadow-lg">
-            <FileText className="w-10 h-10 text-white" />
-          </div>
+          <img
+            src={snpLogo}
+            alt="SNP Tax & Financials"
+            className="mx-auto mb-5 h-14 object-contain md:hidden"
+          />
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
             Welcome Back
           </h1>
@@ -623,6 +650,7 @@ const LoginPage = () => {
         <p className="text-center text-xs text-gray-400 mt-6">
           Secure tax preparation platform
         </p>
+        </div>
       </div>
 
       {/* Account Selection Modal */}

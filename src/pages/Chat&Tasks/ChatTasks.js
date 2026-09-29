@@ -244,18 +244,18 @@
 
 
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import NewChat from "./NewChat";
+import UpdateChat from "./UpdateChat";
 
 // ✅ API imports
 import { chatAPI, accountsAPI } from "../../services/api";
 
 const ChatsTasks = () => {
-  const navigate = useNavigate();
   const [accountId] = useState(sessionStorage.getItem("accountId"));
   const [chatList, setChatList] = useState([]);
   const [accountName, setAccountName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectedChatId, setSelectedChatId] = useState(null);
 
   const [open, setOpen] = useState(false);
 
@@ -300,10 +300,13 @@ const ChatsTasks = () => {
     ).length;
 
   // ================= OPEN CHAT =================
+  // Opens the thread in the right-hand pane instead of navigating away, so
+  // the thread list stays visible while reading a conversation.
   const handleShowChat = async (chatId) => {
+    setSelectedChatId(chatId);
     try {
       await chatAPI.markAllAsRead(chatId, accountId, "Admin");
-      navigate(`/updatechat/${chatId}`);
+      fetchChats();
     } catch (error) {
       console.error("Error marking message as read:", error);
     }
@@ -340,10 +343,14 @@ return (
       </button>
     </div>
 
-    {/* CARD WRAPPER */}
+    {/* TWO-PANE: thread list on the left, conversation on the right */}
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 h-[calc(100vh-12rem)] min-h-[520px]">
+
+    {/* LEFT: THREAD LIST */}
     <div className="
+      lg:col-span-4 flex flex-col min-h-0
       rounded-xl border border-border
-      bg-card shadow-sm overflow-hidden
+      bg-card shadow-sm overflow-y-auto
     ">
 
       {/* LOADING */}
@@ -375,8 +382,12 @@ return (
           const messages = chat.description || [];
           const latest = messages[messages.length - 1];
 
-          const cleanMessage =
-            latest?.message?.replace(/<[^>]+>/g, "") || "";
+          // Stripping tags with a regex leaves HTML entities (e.g.
+          // "&nbsp;") visible as literal text; parse and read
+          // .textContent instead so entities are decoded correctly.
+          const cleanMessage = latest?.message
+            ? new DOMParser().parseFromString(latest.message, "text/html").body.textContent.trim()
+            : "";
 
           const sender =
             latest?.fromwhome === "client"
@@ -387,12 +398,16 @@ return (
             <div
               key={chat._id}
               onClick={() => handleShowChat(chat._id)}
-              className="
+              className={`
                 px-5 py-4 cursor-pointer
-                hover:bg-muted/50
                 transition
                 border-b border-border last:border-none
-              "
+                ${
+                  selectedChatId === chat._id
+                    ? "bg-primary/10 ring-1 ring-inset ring-primary/20"
+                    : "hover:bg-muted/50"
+                }
+              `}
             >
 
               {/* TOP ROW */}
@@ -456,6 +471,37 @@ return (
             </div>
           );
         })}
+    </div>
+
+    {/* RIGHT: CONVERSATION */}
+    <div className="lg:col-span-8 min-h-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      {selectedChatId ? (
+        <UpdateChat key={selectedChatId} chatId={selectedChatId} embedded />
+      ) : (
+        <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+          <svg
+            className="h-10 w-10 text-muted-foreground/60"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+            />
+          </svg>
+          <p className="text-sm font-medium text-foreground">
+            No conversation selected
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Choose a chat from the list to read the full conversation.
+          </p>
+        </div>
+      )}
+    </div>
+
     </div>
 
     {/* MODAL */}

@@ -11,7 +11,7 @@ import "material-react-toastify/dist/ReactToastify.css";
 const root = ReactDOM.createRoot(document.getElementById("root"));
 
 root.render(
-  <BrowserRouter basename="/client">
+  <BrowserRouter basename={process.env.REACT_APP_BASE_PATH}>
      <ToastProvider>
     <AuthProvider>
     

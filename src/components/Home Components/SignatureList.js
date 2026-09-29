@@ -12,6 +12,7 @@ import {
   IconButton,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import { accountDocsAPI } from "../../services/api";
 
 const SignatureList = ({ documentsList, targetEmail }) => {
   const [selectedExternalId, setSelectedExternalId] = useState(documentsList.externalId);
@@ -37,18 +38,9 @@ console.log("selectedExternalId",selectedExternalId);
         status: { signStatus: "signatureCompleted" },
       };
 
-      const res = await fetch(
-        "https://www.snptaxes.com/api/accountsdoc/updateStatus",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      );
-
-      const data = await res.json();
-      if (!res.ok) alert(data.error || "Failed folder update");
+      await accountDocsAPI.updateStatus(body);
     } catch (err) {
+      alert(err?.response?.data?.error || "Failed folder update");
       console.error("Error updating folder signStatus:", err);
     }
   };

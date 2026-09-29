@@ -4,7 +4,11 @@ import { useState } from "react";
 import PropTypes from "prop-types";
 // import { toast } from "material-react-toastify";
 
-import Editor from "../../components/Texteditor";
+// The old ReactQuill-based editor here had no file-upload support at all
+// (toolbar only offered link/image URL embeds) - use the same
+// CKEditor-based editor UpdateChat.js already uses, which has the
+// attach-file plugin, so Attach File is available on New Chat too.
+import Editor from "../../TextEditor/TextEditor";
 
 // ✅ API
 import { chatAPI } from "../../services/api";
@@ -248,6 +252,18 @@ const toast = useToast()
             <Editor
               onChange={handleEditorChange}
               value={editorContent}
+              accountId={accId}
+              onFileUploadComplete={(files, message, isHTML = false) => {
+                // Chat doesn't exist yet at this point (it's created on
+                // submit below), so just insert the uploaded file's link
+                // into the draft content instead of sending immediately.
+                if (isHTML) {
+                  setEditorContent((prev) => prev + message);
+                } else {
+                  const fileNames = files.map((f) => f.name || f).join("\n");
+                  setEditorContent((prev) => prev + `📎 ${fileNames}`);
+                }
+              }}
             />
           </div>
         </div>

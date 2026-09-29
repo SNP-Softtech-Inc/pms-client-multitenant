@@ -756,6 +756,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import JSZip from "jszip";
+import { useDropzone } from "react-dropzone";
 import { accountDocsAPI } from "../../services/api";
 import { useToast } from "../../hooks/useToast";
 
@@ -768,8 +769,8 @@ const FolderUploadDrawer = ({
 }) => {
   const [selectedFolder, setSelectedFolder] = useState("");
   const [message, setMessage] = useState("");
-  const [folderName, setFolderName] = useState("my-uploaded-folder");
   const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const hiddenFileInput = useRef(null);
   const toast = useToast();
 
@@ -780,73 +781,252 @@ const FolderUploadDrawer = ({
   useEffect(() => {
     if (isOpen && selectedFolderForMenu) {
       setSelectedFolder(selectedFolderForMenu.path);
-      setFolderName("");
     } else if (!isOpen) {
       setSelectedFolder("");
-      setFolderName("");
       setFiles([]);
       setMessage("");
+      setUploading(false);
     }
   }, [isOpen, selectedFolderForMenu]);
 
   const handleFolderSelect = (path) => setSelectedFolder(path);
 
-  const handleUploadFolderSelect = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    setFiles(selectedFiles);
+  // Staged entries are { file, relativePath }. Dropped files carry their path
+  // in the directory entry rather than in webkitRelativePath, which is
+  // read-only and empty for drops, so the path is tracked alongside the file.
+  const folderGroups = files.reduce((groups, item) => {
+    const root = item.relativePath.split("/")[0];
+    (groups[root] = groups[root] || []).push(item);
+    return groups;
+  }, {});
 
-    if (selectedFiles.length > 0) {
-      const firstPath = selectedFiles[0].webkitRelativePath;
-      const topLevelFolder = firstPath.split("/")[0];
-      setFolderName(topLevelFolder);
+  const folderNames = Object.keys(folderGroups);
+
+  // Add to what is already staged rather than replacing it - picking a second
+  // folder used to discard the first - and never stage the same file twice.
+  const stageItems = (incoming) => {
+    setFiles((prev) => {
+      const seen = new Set(prev.map((i) => i.relativePath));
+      return [...prev, ...incoming.filter((i) => !seen.has(i.relativePath))];
+    });
+  };
+
+  const removeFolder = (name) => {
+    setFiles((prev) =>
+      prev.filter((i) => i.relativePath.split("/")[0] !== name),
+    );
+  };
+
+  const handleUploadFolderSelect = (e) => {
+    const picked = Array.from(e.target.files);
+    if (picked.length === 0) return;
+
+    stageItems(
+      picked.map((file) => ({ file, relativePath: file.webkitRelativePath })),
+    );
+
+    // Let the same folder be re-picked later; without this the input keeps
+    // its value and firing change again for it is not guaranteed.
+    e.target.value = "";
+  };
+
+  // react-dropzone's file-selector walks dropped directories for us, and
+  // gives each file a `path` such as "/Reports/2025/q1.pdf". A file dialog can
+  // only ever return one folder, so dropping is the only way to select several
+  // at once - and it avoids the browser's directory-picker confirmation.
+  const { getRootProps, isDragActive } = useDropzone({
+    onDrop: (accepted) => {
+      if (uploading) return;
+
+      const staged = accepted
+        .map((file) => ({
+          file,
+          relativePath: (file.path || file.name).replace(/^\/+/, ""),
+        }))
+        // Only items inside a folder - a loose file has nothing to group
+        // under and this drawer uploads folders.
+        .filter((item) => item.relativePath.includes("/"));
+
+      if (staged.length === 0) {
+        toast.error("Drop folders here, not individual files");
+        return;
+      }
+
+      stageItems(staged);
+    },
+    noClick: true,
+    noKeyboard: true,
+    disabled: uploading,
+  });
+
+  // Up to 500MB per selection, but not in one request: the service buffers
+  // uploads wholly in memory, and nginx caps the body size - one archive of
+  // several folders came back 413. The total is spread over requests of this
+  // size instead. Raw file bytes are the estimate, since a zip of documents
+  // is rarely larger than its input.
+  const MAX_BATCH_BYTES = 40 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 500 * 1024 * 1024;
+
+  const totalBytes = files.reduce((sum, i) => sum + (i.file.size || 0), 0);
+
+  const formatBytes = (bytes) =>
+    bytes >= 1024 * 1024
+      ? `${Math.round(bytes / 1024 / 1024)} MB`
+      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+  const buildBatches = () => {
+    const batches = [];
+    let current = [];
+    let currentBytes = 0;
+
+    for (const name of folderNames) {
+      const bytes = folderGroups[name].reduce(
+        (sum, i) => sum + (i.file.size || 0),
+        0,
+      );
+
+      if (current.length > 0 && currentBytes + bytes > MAX_BATCH_BYTES) {
+        batches.push(current);
+        current = [];
+        currentBytes = 0;
+      }
+
+      current.push(name);
+      currentBytes += bytes;
     }
+
+    if (current.length > 0) batches.push(current);
+    return batches;
   };
 
   const handleUpload = async () => {
+    if (uploading) return;
+
     if (!files.length) {
-      alert("Please select a folder first!");
+      toast.error("Please select a folder first!");
       return;
     }
 
     if (!selectedFolder || selectedFolder.trim() === "") {
-      alert("Please select target path first!");
+      toast.error("Please select target path first!");
       return;
     }
 
-    let targetFolderPath = selectedFolder
-      ? `${selectedFolder}/${folderName}`
-      : folderName;
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      toast.error(
+        `Selection is ${formatBytes(totalBytes)} - the limit is ${formatBytes(
+          MAX_TOTAL_BYTES,
+        )}. Remove some folders and upload the rest separately.`,
+      );
+      return;
+    }
 
-    targetFolderPath = targetFolderPath.replace(/\/+/g, "/");
+    setUploading(true);
 
-    setMessage("Zipping folder...");
-
-    const zip = new JSZip();
-    files.forEach((file) => {
-      zip.file(file.webkitRelativePath, file);
-    });
-
-    const zipBlob = await zip.generateAsync({ type: "blob" });
-
-    const formData = new FormData();
-    formData.append("folderZip", zipBlob, `${folderName}.zip`);
-    formData.append("folderName", folderName);
-    formData.append("folderPath", targetFolderPath);
-
-    setMessage("Uploading...");
+    const destination = selectedFolder.replace(/\/+$/, "");
+    const batches = buildBatches();
+    const failed = [];
+    let tooLarge = false;
 
     try {
-      const res = await accountDocsAPI.uploadFolderZip(formData);
-      const data = res.data;
+      for (let b = 0; b < batches.length; b++) {
+        const batch = batches[b];
+        const label =
+          batches.length > 1 ? ` (part ${b + 1} of ${batches.length})` : "";
 
-      setMessage(data.message || "Uploaded successfully!");
-      toast.success("Folder uploaded successfully");
+        // Both callbacks fire far more often than once per percent, and a
+        // setState per call would make re-rendering its own bottleneck.
+        let lastShown = -1;
+        const report = (verb, percent) => {
+          const whole = Math.round(percent);
+          if (whole === lastShown) return;
+          lastShown = whole;
+          setMessage(`${verb} ${batch.join(", ")}${label} - ${whole}%`);
+        };
+
+        const zip = new JSZip();
+        batch.forEach((name) => {
+          folderGroups[name].forEach((item) => {
+            zip.file(item.relativePath, item.file);
+          });
+        });
+
+        // JSZip defaults to STORE - no compression - so archives went over
+        // the wire at the full size of the files. Level 3 gives most of the
+        // saving on documents for a fraction of the default level 6's time.
+        const zipBlob = await zip.generateAsync(
+          {
+            type: "blob",
+            compression: "DEFLATE",
+            compressionOptions: { level: 3 },
+          },
+          (meta) => report("Compressing", meta.percent),
+        );
+
+        lastShown = -1;
+        const onUploadProgress = (evt) => {
+          if (!evt.total) return;
+          report("Uploading", (evt.loaded / evt.total) * 100);
+        };
+
+        const formData = new FormData();
+        formData.append("folderZip", zipBlob, `${batch[0]}.zip`);
+
+        try {
+          if (batch.length === 1) {
+            // One folder keeps using the original endpoint so its behaviour
+            // stays exactly as it has always been.
+            formData.append("folderName", batch[0]);
+            formData.append(
+              "folderPath",
+              `${destination}/${batch[0]}`.replace(/\/+/g, "/"),
+            );
+            await accountDocsAPI.uploadFolderZip(formData, onUploadProgress);
+          } else {
+            // Several folders in one archive: this endpoint keeps each
+            // entry's root rather than stripping it.
+            formData.append("folderPath", destination);
+            await accountDocsAPI.uploadMultiFolderZip(
+              formData,
+              onUploadProgress,
+            );
+          }
+        } catch (err) {
+          console.error(`Upload failed for ${batch.join(", ")}:`, err);
+          if (err?.response?.status === 413) tooLarge = true;
+          failed.push(...batch);
+        }
+      }
+
+      const uploaded = folderNames.length - failed.length;
+
+      if (failed.length > 0) {
+        toast.error(
+          tooLarge
+            ? `Server rejected the upload as too large. ${uploaded} of ${folderNames.length} folder(s) uploaded.`
+            : `${uploaded} of ${folderNames.length} folder(s) uploaded. Failed: ${failed.join(", ")}`,
+        );
+        setMessage(`Failed: ${failed.join(", ")}`);
+      } else {
+        toast.success(
+          `${uploaded} folder${uploaded === 1 ? "" : "s"} uploaded successfully`,
+        );
+        setMessage("Uploaded successfully!");
+      }
 
       await fetchFolderTree();
-      onClose();
-    } catch (err) {
-      setMessage("Upload failed!");
-      toast.error("Upload failed!");
+
+      // Only close when everything landed - otherwise leave the drawer open
+      // with the folders that failed still staged, so they can be retried.
+      if (failed.length === 0) {
+        onClose();
+      } else {
+        setFiles((prev) =>
+          prev.filter((i) => failed.includes(i.relativePath.split("/")[0])),
+        );
+      }
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -860,8 +1040,11 @@ const FolderUploadDrawer = ({
         />
       )}
 
-      {/* DRAWER */}
+      {/* DRAWER - the whole panel is the drop target, not just the dashed box:
+          a small target is easy to miss, and a folder released elsewhere
+          either does nothing or makes the browser navigate away. */}
       <div
+        {...getRootProps()}
         className={`
           fixed top-0 right-0 z-50 h-full
           w-full sm:w-[640px] md:w-[520px]
@@ -873,6 +1056,14 @@ const FolderUploadDrawer = ({
           ${isOpen ? "translate-x-0" : "translate-x-full"}
         `}
       >
+        {isDragActive && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-blue-500 bg-blue-500/10">
+            <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+              Drop folders to add them
+            </p>
+          </div>
+        )}
+
         {/* HEADER */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex flex-col">
@@ -900,12 +1091,31 @@ const FolderUploadDrawer = ({
               Select Folder to Upload
             </label>
 
-            <button
-              onClick={handleClick}
-              className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-            >
-              📁 Choose Folder
-            </button>
+            <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-blue-400/50 bg-blue-50 dark:bg-blue-900/10 px-4 py-6 text-center">
+              <span className="text-xl">📁</span>
+
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                Drag folders here
+              </p>
+
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Drop as many as you like anywhere in this panel - no browser
+                prompt.
+              </p>
+            </div>
+
+            <div className="mt-2 flex items-center justify-center gap-2">
+              <span className="text-xs text-gray-400">Can't drag?</span>
+              <button
+                onClick={handleClick}
+                disabled={uploading}
+                className="text-xs font-medium text-gray-500 underline underline-offset-2 hover:text-gray-700 disabled:opacity-50"
+              >
+                {folderNames.length > 0
+                  ? "Browse for another folder"
+                  : "Browse for one folder"}
+              </button>
+            </div>
 
             <input
               type="file"
@@ -917,24 +1127,46 @@ const FolderUploadDrawer = ({
               multiple
             />
 
-            {files.length > 0 && (
-              <div className="mt-2 space-y-1">
-                <div className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
-                  <span className="text-blue-600 dark:text-blue-400">📂</span>
-                  <span className="font-medium">{folderName}</span>
-                  <span className="text-gray-400">
-                    ({files.length} files)
-                  </span>
+            {folderNames.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                <div
+                  className={`text-xs font-medium ${
+                    totalBytes > MAX_TOTAL_BYTES
+                      ? "text-red-600"
+                      : "text-blue-600 dark:text-blue-400"
+                  }`}
+                >
+                  {folderNames.length} folder
+                  {folderNames.length === 1 ? "" : "s"} to upload -{" "}
+                  {formatBytes(totalBytes)}
+                  {totalBytes > MAX_TOTAL_BYTES &&
+                    ` (over the ${formatBytes(MAX_TOTAL_BYTES)} limit)`}
                 </div>
-                <div className="text-xs text-gray-400">
-                  Total size:{" "}
-                  {(
-                    files.reduce((acc, file) => acc + file.size, 0) /
-                    1024 /
-                    1024
-                  ).toFixed(2)}{" "}
-                  MB
-                </div>
+
+                {folderNames.map((name) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between gap-2 rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-gray-700 dark:text-gray-200">
+                        {name}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {folderGroups[name].length} file(s)
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => removeFolder(name)}
+                      disabled={uploading}
+                      aria-label={`Remove ${name}`}
+                      className="shrink-0 rounded px-2 text-gray-400 hover:text-gray-700 disabled:opacity-40"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -992,7 +1224,10 @@ const FolderUploadDrawer = ({
 
             {selectedFolder && (
               <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                Target: {selectedFolder}/{folderName || "new-folder"}
+                Target: {selectedFolder}/
+                {folderNames.length === 1
+                  ? folderNames[0]
+                  : `${folderNames.length || "no"} folder(s)`}
               </p>
             )}
           </div>
