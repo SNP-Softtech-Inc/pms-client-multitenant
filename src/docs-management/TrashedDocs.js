@@ -716,6 +716,30 @@ const TrashedDocs = () => {
       handleMenuClose();
     };
 
+    // Trashing only flags an item in its metadata - the file is still on
+    // disk at the same path - so a trashed document can be read without
+    // restoring it first. It used to be shown as cursor-not-allowed.
+    const openTrashedFile = (item) => {
+      if (!item?.path) return;
+
+      const fileUrl = `${process.env.REACT_APP_FOLDER_MANAGEMENT}/uploads/accounts/${item.path}`;
+      const ext = item.name?.split(".").pop()?.toLowerCase() || "";
+      const viewable = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "txt"];
+
+      if (viewable.includes(ext)) {
+        // Opened straight from the click with no await first, so the browser
+        // does not treat it as an unsolicited popup.
+        window.open(fileUrl, "_blank", "noopener,noreferrer");
+      } else {
+        const link = document.createElement("a");
+        link.href = fileUrl;
+        link.download = item.name || "download";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    };
+
     const handleDownload = async (item) => {
       try {
         const res = await accountDocsAPI.downloadItems({
@@ -931,9 +955,14 @@ const TrashedDocs = () => {
                   ) : (
                     <div className="flex items-center">
                       <div className="mr-2">{getFileIcon(item.name)}</div>
-                      <span className="cursor-not-allowed text-gray-700">
+                      <button
+                        type="button"
+                        onClick={() => openTrashedFile(item)}
+                        title="Open document in a new tab"
+                        className="text-left text-gray-700 underline-offset-2 hover:text-blue-700 hover:underline"
+                      >
                         {item.name} (Trashed)
-                      </span>
+                      </button>
                     </div>
                   )}
                 </div>
