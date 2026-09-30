@@ -44,6 +44,7 @@ import {
   esignAPI,
 } from "../services/api";
 import { X, Maximize2, Minimize2 } from "lucide-react";
+import PayInvoice from "../pages/Billing/PayInvoice";
 import { CheckCircle2 } from "lucide-react";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import {
@@ -80,6 +81,8 @@ const DocsFolderTree = () => {
     console.log("folder structure of account is", accountId);
     const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
     const [selectedInvoiceFile, setSelectedInvoiceFile] = useState(null);
+    // Whether the payment form is showing inside the locked-document dialog.
+    const [payingInline, setPayingInline] = useState(false);
 
     const [expandedFolders, setExpandedFolders] = useState({});
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
@@ -653,15 +656,33 @@ const DocsFolderTree = () => {
 
     const navigate = useNavigate();
 
+    // Paying used to navigate to /payinvoice and, on success, land on the
+    // invoice list - leaving the client to find their way back to the
+    // document they were trying to open. The form is now shown in this
+    // dialog and the document opens as soon as payment succeeds.
     const handlePayInvoice = () => {
       if (!selectedInvoiceFile?.meta?.invoices?.length) return;
-      console.log("nbdshgcsdc invoie", selectedInvoiceFile?.meta?.invoices);
-      navigate("/payinvoice", {
-        state: {
-          selectedInvoices: selectedInvoiceFile.meta.invoices,
-          accountName: accountName,
-        },
-      });
+      setPayingInline(true);
+    };
+
+    const handlePaidInline = async () => {
+      const file = selectedInvoiceFile;
+
+      setPayingInline(false);
+      setInvoiceDialogOpen(false);
+      setSelectedInvoiceFile(null);
+
+      // Refresh so the lock that was just paid off is gone from the tree,
+      // then open the document the client originally clicked.
+      try {
+        await fetchFolderTree(accountId);
+      } catch (err) {
+        console.error("Failed to refresh documents after payment:", err);
+      }
+
+      if (file?.path && file?.name) {
+        openDocument(file.path, file.name);
+      }
     };
 
     const handleFileClick = async (fullPath, fileName, meta = {}) => {
@@ -2422,22 +2443,38 @@ const DocsFolderTree = () => {
               </div>
 
               {/* Footer */}
+              {/* Payment happens here rather than on a separate page, so the
+                  client never leaves the document they were opening. */}
+              {payingInline && (
+                <div className="max-h-[60vh] overflow-y-auto border-t border-slate-200 px-2 py-2">
+                  <PayInvoice
+                    invoices={selectedInvoiceFile?.meta?.invoices || []}
+                    accountName={accountName}
+                    onPaid={handlePaidInline}
+                  />
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 px-6 py-5 border-t border-slate-200 bg-slate-50">
                 <button
                   className="h-11 px-5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-medium transition-all"
-                  onClick={() => setInvoiceDialogOpen(false)}
+                  onClick={() => {
+                    setInvoiceDialogOpen(false);
+                    setPayingInline(false);
+                  }}
                 >
                   Close
                 </button>
 
-                {selectedInvoiceFile?.meta?.invoices?.length > 0 && (
-                  <button
-                    className="h-11 px-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg"
-                    onClick={handlePayInvoice}
-                  >
-                    Pay Invoice
-                  </button>
-                )}
+                {!payingInline &&
+                  selectedInvoiceFile?.meta?.invoices?.length > 0 && (
+                    <button
+                      className="h-11 px-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg"
+                      onClick={handlePayInvoice}
+                    >
+                      Pay Invoice
+                    </button>
+                  )}
               </div>
             </div>
           </div>
