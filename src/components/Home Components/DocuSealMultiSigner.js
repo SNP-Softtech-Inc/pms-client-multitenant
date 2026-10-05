@@ -1135,14 +1135,14 @@ const DocuSealMultiSigner = ({ accountId }) => {
 {dialogOpen && (
   <div
     className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md ${
-      signerMaximized ? "p-0" : "p-2 sm:p-3"
+      signerMaximized ? "p-0" : "p-0 sm:p-2"
     }`}
   >
     <div
-      className={`w-full bg-white/90 backdrop-blur-2xl shadow-2xl border border-white/30 overflow-hidden flex flex-col ${
+      className={`w-full bg-white shadow-2xl border border-white/30 overflow-hidden flex flex-col ${
         signerMaximized
           ? "max-w-none h-full max-h-none rounded-none"
-          : "max-w-[1600px] max-h-[96vh] rounded-2xl"
+          : "max-w-none h-full max-h-none rounded-none sm:h-[97vh] sm:rounded-xl"
       }`}
     >
       {/* Header - fixed height */}
@@ -1174,9 +1174,12 @@ const DocuSealMultiSigner = ({ accountId }) => {
       </div>
 
       {/* Content - scrollable */}
-      <div className="flex-1 overflow-auto bg-slate-100 min-h-0">
+      {/* The grey gutter and the 600px floor both read as padding around the
+          document. The form now gets the whole remaining height instead of
+          sitting letterboxed inside it. */}
+      <div className="flex-1 overflow-auto bg-white min-h-0">
         {selectedSlug && (
-          <div className="w-full h-full min-h-[600px] bg-white">
+          <div className="h-full w-full bg-white">
             {/* <DocusealForm
                     src={`https://docuseal.com/s/${selectedSlug}`}
                     email={targetEmail}
@@ -1252,7 +1255,15 @@ const DocuSealMultiSigner = ({ accountId }) => {
                    <DocusealForm
                     src={`https://docuseal.com/s/${selectedSlug}`}
                     email={targetEmail}
-                    
+                    // The embed was given no layout props at all, so it drew
+                    // its own title bar above our dialog header (duplicate
+                    // chrome eating the top) and started unexpanded. Filling
+                    // the container is what makes the page itself bigger.
+                    withTitle={false}
+                    expand
+                    backgroundColor="#ffffff"
+                    className="h-full w-full"
+                    style={{ height: "100%", width: "100%" }}
                     onComplete={async (data) => {
                       console.log("Post-sign data:", data);
 
