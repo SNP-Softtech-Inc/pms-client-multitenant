@@ -666,22 +666,27 @@ const DocsFolderTree = () => {
     };
 
     const handlePaidInline = async () => {
-      const file = selectedInvoiceFile;
+      // Hold on to the file before the dialog state is cleared - the whole
+      // point of paying here is to land on the document that was locked.
+      const paidFile = selectedInvoiceFile;
 
       setPayingInline(false);
       setInvoiceDialogOpen(false);
       setSelectedInvoiceFile(null);
 
-      // Refresh so the lock that was just paid off is gone from the tree,
-      // then open the document the client originally clicked.
+      // Open it straight away, ahead of the refresh below. Waiting until
+      // after the await puts a popup blocker between the client and the
+      // document they just paid for.
+      if (paidFile?.path && paidFile?.name) {
+        openDocument(paidFile.path, paidFile.name);
+      }
+
+      // Refresh so the lock that was just paid off is gone from the tree
+      // when the client comes back to Documents.
       try {
         await fetchFolderTree(accountId);
       } catch (err) {
         console.error("Failed to refresh documents after payment:", err);
-      }
-
-      if (file?.path && file?.name) {
-        openDocument(file.path, file.name);
       }
     };
 
@@ -816,15 +821,29 @@ const DocsFolderTree = () => {
         // console.log("Opening document:", fileUrl);
         const fileExt = fileName.split(".").pop().toLowerCase();
         const viewableExtensions = ["pdf", "jpg", "jpeg", "png", "gif", "txt"];
-        if (viewableExtensions.includes(fileExt)) {
-          window.open(fileUrl, "_blank", "noopener,noreferrer");
-        } else {
+
+        const downloadInstead = () => {
           const link = document.createElement("a");
           link.href = fileUrl;
           link.download = fileName;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+        };
+
+        if (viewableExtensions.includes(fileExt)) {
+          // A tab opened outside a click - after a payment completes, say -
+          // can be refused by the popup blocker. window.open returns null
+          // when that happens, and silently doing nothing is what made the
+          // document appear not to open at all.
+          const viewerWindow = window.open(
+            fileUrl,
+            "_blank",
+            "noopener,noreferrer",
+          );
+          if (!viewerWindow) downloadInstead();
+        } else {
+          downloadInstead();
         }
       } catch (error) {
         console.error("Error opening document:", error);

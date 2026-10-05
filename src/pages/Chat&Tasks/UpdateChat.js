@@ -55,44 +55,89 @@ const UpdateChat = ({ chatId: chatIdProp, embedded = false }) => {
   const menuRef = useRef(null);
 
   // ✅ CHAT API
-  const getsChatDetails = async () => {
+  // Read receipts are set by the admin on their own screen, so the only way
+  // this view learns that a message was read - and that the single tick
+  // should become a double tick - is by asking again.
+  const descriptionsSignatureRef = useRef("");
+
+  const getsChatDetails = async ({ silent = false } = {}) => {
     try {
       const res = await chatAPI.getChatById(_id, "client");
       const data = res.data;
-      console.log("Chat details:", data);
+      if (!silent) console.log("Chat details:", data);
       setChatSubject(data.chat.chatsubject);
       setTime(data.chat.updatedAt);
       setAccountName(data.chat.accountid.accountName);
-      setChatDescriptions(data.chat.description || []);
+
+      // Only swap the array in when something actually changed. It is the
+      // trigger for scroll-to-bottom, and replacing it on every poll would
+      // drag the client away from whatever they had scrolled back to read.
+      const nextDescriptions = data.chat.description || [];
+      const signature = JSON.stringify(nextDescriptions);
+      if (signature !== descriptionsSignatureRef.current) {
+        descriptionsSignatureRef.current = signature;
+        setChatDescriptions(nextDescriptions);
+      }
+
       setTasks(data.chat.clienttasks.flat());
     } catch (error) {
-      console.error("Error fetching data:", error);
+      if (!silent) console.error("Error fetching data:", error);
     }
   };
 
   useEffect(() => {
     getsChatDetails();
-  }, []);
+
+    // 15s lands a read receipt while the client is still looking at the
+    // thread, without hammering the chat service. Skipped while the tab is
+    // in the background, and caught up as soon as it comes forward again.
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        getsChatDetails({ silent: true });
+      }
+    };
+
+    const poll = setInterval(refreshIfVisible, 15000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_id]);
 
   // Check if message is within 10 minutes
+  // How long after sending a message it can still be edited. WhatsApp-style:
+  // short, and once it lapses the Edit action disappears rather than erroring
+  // on click. Was 24 hours, which is long enough that "edited" stops being
+  // a correction and starts being a rewrite of the record.
+  const EDIT_WINDOW_MS = 5 * 60 * 1000;
+
+  // Repaint periodically so the window visibly lapses. canEditMessage is read
+  // during render, so without this the Edit action would sit there looking
+  // available until some unrelated state change happened to repaint the
+  // thread - the click would be refused, but only after the user tried.
+  const [, setEditClockTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setEditClockTick((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
   const canEditMessage = (messageTime) => {
     if (!messageTime) return false;
-    
-    const messageTimestamp = new Date(messageTime).getTime();
-    const currentTime = new Date().getTime();
-   // const tenMinutes = 10 * 60 * 1000;
-    
-  //  return (currentTime - messageTimestamp) <= tenMinutes;
 
-  const oneDay = 24 * 60 * 60 * 1000;
-return currentTime - messageTimestamp <= oneDay;
+    const messageTimestamp = new Date(messageTime).getTime();
+    if (Number.isNaN(messageTimestamp)) return false;
+
+    return Date.now() - messageTimestamp <= EDIT_WINDOW_MS;
   };
 
   // Edit message function for client
   const handleEditMessage = (message) => {
     console.log("Attempting to edit message:", message);
     if (!canEditMessage(message.time)) {
-      toast.error("Cannot edit message after 24 hours");
+      toast.error("Messages can only be edited within 5 minutes of sending");
       return;
     }
     

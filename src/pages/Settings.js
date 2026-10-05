@@ -158,7 +158,13 @@ const UserProfile = () => {
   const fetchContact = async (contactId) => {
     try {
       const res = await contactsAPI.getContactById(contactId);
-      const data = res?.data?.contact || res?.data || null;
+      // getContactById answers { success, data: contact }. Reading .contact
+      // missed it and fell through to res.data, so the whole envelope was
+      // stored as the contact - every field came out undefined. The page
+      // then fell back to the name cached at login and showed middle name
+      // and phone as blank, which is why saving looked like it did nothing:
+      // the write succeeded, the re-read just never surfaced it.
+      const data = res?.data?.data || res?.data?.contact || res?.data || null;
       setContact(data);
     } catch (err) {
       // The account panel is still useful without this, so don't fail the page
