@@ -798,10 +798,12 @@ const DocsFolderTree = () => {
           return;
         }
 
-        if (meta.readOnly) {
-          alert("This file is locked and cannot be opened.");
-          return;
-        }
+        // A sealed document is still readable. The seal exists to stop the
+        // client changing or removing it - renaming, moving, deleting and
+        // uploading into it all remain blocked below and in the row menu.
+        // Refusing to open it as well left the client unable to read their
+        // own documents, which the seal was never meant to do.
+
         // Create VIEW audit
         await accountDocsAPI.viewDocument({
           filePath: fullPath,
@@ -1125,6 +1127,9 @@ const DocsFolderTree = () => {
       }
 
       if (item.isFile) {
+        // A seal restricts what the client may CHANGE, not what they may
+        // read. Opening and downloading stay available on a sealed document;
+        // rename, move and delete below do not.
         const isLocked = item.meta?.readOnly === true;
         return [
           {
@@ -1134,7 +1139,6 @@ const DocsFolderTree = () => {
             name: "Open in New Tab",
             icon: ArrowTopRightOnSquareIcon,
             action: "openInNewTab",
-            disabled: isLocked,
             color: "text-blue-600",
           },
           { separator: true },
@@ -1153,10 +1157,10 @@ const DocsFolderTree = () => {
             color: "text-gray-600",
           },
           {
+            // Saving a copy reads the document, it does not change it.
             name: "Download",
             icon: ArrowDownTrayIcon,
             action: "download",
-            disabled: isLocked,
             color: "text-gray-600",
           },
           { separator: true },
@@ -1389,11 +1393,7 @@ const DocsFolderTree = () => {
           : false;
 
         const handleSafeFileClick = () => {
-          if (meta.readOnly) {
-            alert("This file is locked and cannot be opened.");
-            return;
-          }
-
+          // Sealed is view-only, not unopenable - see handleFileClick.
           if (!isFolder) {
             handleFileClick(fullPath, item.name, meta);
           }
@@ -1416,7 +1416,8 @@ const DocsFolderTree = () => {
             }
           `}
               style={{
-                cursor: meta.readOnly ? "not-allowed" : "pointer",
+                // Sealed rows are readable, so they take a normal pointer.
+                cursor: "pointer",
               }}
             >
               {/* CHECKBOX */}
@@ -1490,8 +1491,10 @@ const DocsFolderTree = () => {
                       transition-all duration-200
                       disabled:opacity-50
                     "
+                        // Sealing is applied recursively, so leaving this
+                        // disabled made every document beneath a sealed folder
+                        // unreachable rather than merely unmodifiable.
                         onClick={() => toggleFolder(fullPath, meta.readOnly)}
-                        disabled={meta.readOnly}
                       >
                         {expandedFolders[fullPath] ? (
                           <FolderOpenIcon color="#2563eb" className="w-5 h-5" />
@@ -1569,11 +1572,7 @@ const DocsFolderTree = () => {
                         <span
                           className={`
                         text-sm font-medium transition-all
-                        ${
-                          meta.readOnly
-                            ? "text-slate-400"
-                            : "text-blue-700 hover:text-blue-800"
-                        }
+                        ${"text-blue-700 hover:text-blue-800"}
                       `}
                           onClick={handleSafeFileClick}
                           style={{
@@ -1666,15 +1665,9 @@ const DocsFolderTree = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (meta.readOnly) return;
                         openDocument(fullPath, item.name);
                       }}
-                      disabled={meta.readOnly}
-                      title={
-                        meta.readOnly
-                          ? "This document is locked"
-                          : "Open in new tab"
-                      }
+                      title="Open in new tab"
                       aria-label="Open in new tab"
                       className="
                         h-10 w-10 rounded-xl
