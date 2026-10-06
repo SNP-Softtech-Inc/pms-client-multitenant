@@ -1654,6 +1654,43 @@ const DocsFolderTree = () => {
               {/* ACTIONS */}
 
               <td className="px-5 py-4 text-right align-middle">
+                {/* "Open in New Tab" already exists in the menu below, but it
+                    is three clicks deep and easy to miss - which is why it kept
+                    being reported as absent. This puts it on the row itself for
+                    files, alongside the menu rather than instead of it.
+                    Disabled for a locked file, matching the menu entry and the
+                    row click, neither of which will open one. */}
+                <div className="inline-flex items-center gap-1">
+                  {item.type === "file" && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (meta.readOnly) return;
+                        openDocument(fullPath, item.name);
+                      }}
+                      disabled={meta.readOnly}
+                      title={
+                        meta.readOnly
+                          ? "This document is locked"
+                          : "Open in new tab"
+                      }
+                      aria-label="Open in new tab"
+                      className="
+                        h-10 w-10 rounded-xl
+                        hover:bg-white hover:shadow-md
+                        border border-transparent
+                        hover:border-slate-200
+                        transition-all duration-200
+                        inline-flex items-center justify-center
+                        opacity-70 group-hover:opacity-100
+                        disabled:cursor-not-allowed disabled:opacity-30
+                      "
+                    >
+                      <ArrowTopRightOnSquareIcon className="w-5 h-5 text-blue-600" />
+                    </button>
+                  )}
+
                 {!hideMenu && (
                   <Popover className="relative">
                     {({ open, close }) => (
@@ -1752,6 +1789,7 @@ const DocsFolderTree = () => {
                     )}
                   </Popover>
                 )}
+                </div>
 
                 <TooltipProvider>
                   {allowDownload && (
