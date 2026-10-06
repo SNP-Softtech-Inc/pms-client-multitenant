@@ -833,15 +833,27 @@ const DocsFolderTree = () => {
 
         if (viewableExtensions.includes(fileExt)) {
           // A tab opened outside a click - after a payment completes, say -
-          // can be refused by the popup blocker. window.open returns null
-          // when that happens, and silently doing nothing is what made the
-          // document appear not to open at all.
-          const viewerWindow = window.open(
-            fileUrl,
-            "_blank",
-            "noopener,noreferrer",
-          );
-          if (!viewerWindow) downloadInstead();
+          // can be refused by the popup blocker, and silently doing nothing
+          // is what made the document appear not to open at all. So the
+          // return value has to be checked.
+          //
+          // But passing "noopener" in the features string makes window.open
+          // return null BY SPEC, even on success. The null check below then
+          // fired on every single open, so the document opened in a new tab
+          // and a save dialog appeared at the same time. The opener is
+          // severed directly instead, which keeps the same protection
+          // without costing us the ability to detect a blocked popup.
+          const viewerWindow = window.open(fileUrl, "_blank");
+
+          if (viewerWindow) {
+            try {
+              viewerWindow.opener = null;
+            } catch {
+              // Cross-origin tabs will not allow this; nothing to do.
+            }
+          } else {
+            downloadInstead();
+          }
         } else {
           downloadInstead();
         }

@@ -203,14 +203,30 @@ const FileUploadDrawer = ({
       }
 
       setFolderTree(treeData);
-      
-      // Auto-select first folder if available
-      // if (treeData.length > 0 && !selectedFolder) {
-      //   const firstFolder = findFirstFolder(treeData);
-      //   if (firstFolder) {
-      //     setSelectedFolder(firstFolder.path);
-      //   }
-      // }
+
+      // With this commented out, selectedFolder stayed "" and handleUpload
+      // bailed at its own guard - so attaching a file in chat picked the file
+      // and then quietly did nothing. A destination is required by the
+      // endpoint, so one has to be chosen; the client's own upload folder is
+      // the right default, with the first folder as a fallback. The user can
+      // still pick a different one before sending.
+      if (treeData.length > 0) {
+        setSelectedFolder((current) => {
+          if (current) return current;
+
+          const clientFolder = treeData.find(
+            (item) =>
+              item?.type === "folder" &&
+              String(item?.name || "")
+                .toLowerCase()
+                .includes("client uploaded"),
+          );
+          if (clientFolder?.path) return clientFolder.path;
+
+          const firstFolder = findFirstFolder(treeData);
+          return firstFolder?.path || "";
+        });
+      }
     } catch (err) {
       console.error("Error fetching folder tree:", err);
       setError("Error fetching folder tree");
