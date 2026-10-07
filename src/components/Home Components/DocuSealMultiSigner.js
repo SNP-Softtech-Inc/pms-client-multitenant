@@ -262,7 +262,7 @@
 import React, { useEffect, useState } from "react";
 import { DocusealForm } from "@docuseal/react";
 import { esignAPI, accountDocsAPI, accountsAPI, invoiceAPI } from "../../services/api";
-import { X, Info } from "lucide-react";
+import { X, Info, Maximize2, Minimize2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const DocuSealMultiSigner = ({ accountId }) => {
@@ -280,6 +280,11 @@ const DocuSealMultiSigner = ({ accountId }) => {
   
   // State for approval viewer
   const [openViewer, setOpenViewer] = useState(false);
+  // Both document surfaces open in a boxed dialog by default. Maximising
+  // drops the surrounding chrome so the page itself gets the whole viewport,
+  // matching the full-screen control the firm-docs viewer already offers.
+  const [signerMaximized, setSignerMaximized] = useState(false);
+  const [viewerMaximized, setViewerMaximized] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -757,11 +762,13 @@ const DocuSealMultiSigner = ({ accountId }) => {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setSelectedSlug(null);
+    setSignerMaximized(false);
   };
 
   const handleCloseViewer = () => {
     setOpenViewer(false);
     setSelectedDoc(null);
+    setViewerMaximized(false);
   };
 
   const handleCancelClick = () => {
@@ -1126,26 +1133,53 @@ const DocuSealMultiSigner = ({ accountId }) => {
         </div>
       )} */}
 {dialogOpen && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
-    <div className="w-full max-w-6xl bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden flex flex-col max-h-[90vh]">
+  <div
+    className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md ${
+      signerMaximized ? "p-0" : "p-0 sm:p-2"
+    }`}
+  >
+    <div
+      className={`w-full bg-white shadow-2xl border border-white/30 overflow-hidden flex flex-col ${
+        signerMaximized
+          ? "max-w-none h-full max-h-none rounded-none"
+          : "max-w-none h-full max-h-none rounded-none sm:h-[97vh] sm:rounded-xl"
+      }`}
+    >
       {/* Header - fixed height */}
-      <div className="flex-shrink-0 flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
         <div>
-          <h3 className="text-2xl font-bold text-slate-800">Digital Signature</h3>
-          <p className="text-sm text-slate-500 mt-1">Complete your signature process securely</p>
+          <h3 className="text-base font-bold text-slate-800 leading-tight">Digital Signature</h3>
+          <p className="text-xs text-slate-500 leading-tight">Complete your signature process securely</p>
         </div>
-        <button
-          onClick={handleCloseDialog}
-          className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
-        >
-          <X className="w-5 h-5 text-slate-600" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSignerMaximized((v) => !v)}
+            title={signerMaximized ? "Exit full screen" : "Full screen"}
+            aria-label={signerMaximized ? "Exit full screen" : "Full screen"}
+            className="h-9 w-9 rounded-xl hover:bg-slate-100 flex items-center justify-center transition-all"
+          >
+            {signerMaximized ? (
+              <Minimize2 className="w-4 h-4 text-slate-600" />
+            ) : (
+              <Maximize2 className="w-4 h-4 text-slate-600" />
+            )}
+          </button>
+          <button
+            onClick={handleCloseDialog}
+            className="h-9 w-9 rounded-xl hover:bg-slate-100 flex items-center justify-center transition-all"
+          >
+            <X className="w-4 h-4 text-slate-600" />
+          </button>
+        </div>
       </div>
 
       {/* Content - scrollable */}
-      <div className="flex-1 overflow-auto bg-slate-100 min-h-0">
+      {/* The grey gutter and the 600px floor both read as padding around the
+          document. The form now gets the whole remaining height instead of
+          sitting letterboxed inside it. */}
+      <div className="flex-1 overflow-auto bg-white min-h-0">
         {selectedSlug && (
-          <div className="w-full h-full min-h-[600px] bg-white">
+          <div className="h-full w-full bg-white">
             {/* <DocusealForm
                     src={`https://docuseal.com/s/${selectedSlug}`}
                     email={targetEmail}
@@ -1221,7 +1255,15 @@ const DocuSealMultiSigner = ({ accountId }) => {
                    <DocusealForm
                     src={`https://docuseal.com/s/${selectedSlug}`}
                     email={targetEmail}
-                    
+                    // The embed was given no layout props at all, so it drew
+                    // its own title bar above our dialog header (duplicate
+                    // chrome eating the top) and started unexpanded. Filling
+                    // the container is what makes the page itself bigger.
+                    withTitle={false}
+                    expand
+                    backgroundColor="#ffffff"
+                    className="h-full w-full"
+                    style={{ height: "100%", width: "100%" }}
                     onComplete={async (data) => {
                       console.log("Post-sign data:", data);
 
@@ -1307,29 +1349,57 @@ const DocuSealMultiSigner = ({ accountId }) => {
 )}
       {/* ================= DOCUMENT APPROVAL DIALOG ================= */}
       {openViewer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
-          <div className="w-full max-w-5xl bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
-              <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-2xl bg-yellow-100 flex items-center justify-center">
-                  <Info className="w-5 h-5 text-yellow-600" />
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md ${
+            viewerMaximized ? "p-0" : "p-2 sm:p-3"
+          }`}
+        >
+          <div
+            className={`w-full bg-white/90 backdrop-blur-2xl shadow-2xl border border-white/30 overflow-hidden flex flex-col ${
+              viewerMaximized
+                ? "max-w-none h-full max-h-none rounded-none"
+                : "max-w-[1600px] max-h-[96vh] rounded-2xl"
+            }`}
+          >
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 shrink-0 rounded-xl bg-yellow-100 flex items-center justify-center">
+                  <Info className="w-4 h-4 text-yellow-600" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-lg truncate max-w-md">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-800 text-sm truncate leading-tight">
                     {selectedDoc?.filename || "Document"}
                   </h3>
-                  <p className="text-sm text-slate-500">Review and approve document</p>
+                  <p className="text-xs text-slate-500 leading-tight">Review and approve document</p>
                 </div>
               </div>
-              <button
-                onClick={handleCloseViewer}
-                className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
-              >
-                <X className="w-5 h-5 text-slate-600" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setViewerMaximized((v) => !v)}
+                  title={viewerMaximized ? "Exit full screen" : "Full screen"}
+                  aria-label={viewerMaximized ? "Exit full screen" : "Full screen"}
+                  className="h-9 w-9 rounded-xl hover:bg-slate-100 flex items-center justify-center transition-all"
+                >
+                  {viewerMaximized ? (
+                    <Minimize2 className="w-4 h-4 text-slate-600" />
+                  ) : (
+                    <Maximize2 className="w-4 h-4 text-slate-600" />
+                  )}
+                </button>
+                <button
+                  onClick={handleCloseViewer}
+                  className="h-9 w-9 rounded-xl hover:bg-slate-100 flex items-center justify-center transition-all"
+                >
+                  <X className="w-4 h-4 text-slate-600" />
+                </button>
+              </div>
             </div>
 
-            <div className="h-[75vh] bg-slate-100">
+            <div
+              className={`bg-slate-100 ${
+                viewerMaximized ? "flex-1 min-h-0" : "h-[85vh]"
+              }`}
+            >
               {selectedDoc ? (
                 <iframe
                   src={selectedDoc.fileUrl}
@@ -1351,7 +1421,7 @@ const DocuSealMultiSigner = ({ accountId }) => {
             </div>
 
             {selectedDoc && (
-              <div className="flex justify-end gap-3 p-5 border-t border-slate-200 bg-white">
+              <div className="flex-shrink-0 flex justify-end gap-3 px-4 py-3 border-t border-slate-200 bg-white">
                 <button
                   className="h-12 px-6 rounded-2xl border border-red-200 text-red-600 hover:bg-red-50 font-medium transition-all disabled:opacity-50"
                   onClick={handleCancelClick}

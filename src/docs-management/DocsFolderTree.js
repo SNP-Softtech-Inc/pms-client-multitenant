@@ -43,7 +43,8 @@ import {
   invoiceAPI,
   esignAPI,
 } from "../services/api";
-import { X } from "lucide-react";
+import { X, Maximize2, Minimize2 } from "lucide-react";
+import PayInvoice from "../pages/Billing/PayInvoice";
 import { CheckCircle2 } from "lucide-react";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import {
@@ -56,6 +57,7 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   TrashIcon,
+  ArrowTopRightOnSquareIcon,
   ArrowDownTrayIcon,
   DocumentArrowUpIcon, // Alternative for file upload
   // FolderOpenIcon        // Alternative for folder upload
@@ -79,6 +81,8 @@ const DocsFolderTree = () => {
     console.log("folder structure of account is", accountId);
     const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
     const [selectedInvoiceFile, setSelectedInvoiceFile] = useState(null);
+    // Whether the payment form is showing inside the locked-document dialog.
+    const [payingInline, setPayingInline] = useState(false);
 
     const [expandedFolders, setExpandedFolders] = useState({});
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
@@ -91,6 +95,9 @@ const DocsFolderTree = () => {
     const [selectedItemForPopover, setSelectedItemForPopover] = useState(null);
     const [folderTree, setFolderTree] = useState([]);
     const [openViewer, setOpenViewer] = useState(false);
+    // Full-screen toggle for the document preview. Resets on close so the
+    // next document opens at the normal size.
+    const [viewerMaximized, setViewerMaximized] = useState(false);
     const [selectedDoc, setSelectedDoc] = useState(null);
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [cancelReason, setCancelReason] = useState("");
@@ -649,15 +656,38 @@ const DocsFolderTree = () => {
 
     const navigate = useNavigate();
 
+    // Paying used to navigate to /payinvoice and, on success, land on the
+    // invoice list - leaving the client to find their way back to the
+    // document they were trying to open. The form is now shown in this
+    // dialog and the document opens as soon as payment succeeds.
     const handlePayInvoice = () => {
       if (!selectedInvoiceFile?.meta?.invoices?.length) return;
-      console.log("nbdshgcsdc invoie", selectedInvoiceFile?.meta?.invoices);
-      navigate("/payinvoice", {
-        state: {
-          selectedInvoices: selectedInvoiceFile.meta.invoices,
-          accountName: accountName,
-        },
-      });
+      setPayingInline(true);
+    };
+
+    const handlePaidInline = async () => {
+      // Hold on to the file before the dialog state is cleared - the whole
+      // point of paying here is to land on the document that was locked.
+      const paidFile = selectedInvoiceFile;
+
+      setPayingInline(false);
+      setInvoiceDialogOpen(false);
+      setSelectedInvoiceFile(null);
+
+      // Open it straight away, ahead of the refresh below. Waiting until
+      // after the await puts a popup blocker between the client and the
+      // document they just paid for.
+      if (paidFile?.path && paidFile?.name) {
+        openDocument(paidFile.path, paidFile.name);
+      }
+
+      // Refresh so the lock that was just paid off is gone from the tree
+      // when the client comes back to Documents.
+      try {
+        await fetchFolderTree(accountId);
+      } catch (err) {
+        console.error("Failed to refresh documents after payment:", err);
+      }
     };
 
     const handleFileClick = async (fullPath, fileName, meta = {}) => {
@@ -768,10 +798,12 @@ const DocsFolderTree = () => {
           return;
         }
 
-        if (meta.readOnly) {
-          alert("This file is locked and cannot be opened.");
-          return;
-        }
+        // A sealed document is still readable. The seal exists to stop the
+        // client changing or removing it - renaming, moving, deleting and
+        // uploading into it all remain blocked below and in the row menu.
+        // Refusing to open it as well left the client unable to read their
+        // own documents, which the seal was never meant to do.
+
         // Create VIEW audit
         await accountDocsAPI.viewDocument({
           filePath: fullPath,
@@ -791,15 +823,41 @@ const DocsFolderTree = () => {
         // console.log("Opening document:", fileUrl);
         const fileExt = fileName.split(".").pop().toLowerCase();
         const viewableExtensions = ["pdf", "jpg", "jpeg", "png", "gif", "txt"];
-        if (viewableExtensions.includes(fileExt)) {
-          window.open(fileUrl, "_blank", "noopener,noreferrer");
-        } else {
+
+        const downloadInstead = () => {
           const link = document.createElement("a");
           link.href = fileUrl;
           link.download = fileName;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+        };
+
+        if (viewableExtensions.includes(fileExt)) {
+          // A tab opened outside a click - after a payment completes, say -
+          // can be refused by the popup blocker, and silently doing nothing
+          // is what made the document appear not to open at all. So the
+          // return value has to be checked.
+          //
+          // But passing "noopener" in the features string makes window.open
+          // return null BY SPEC, even on success. The null check below then
+          // fired on every single open, so the document opened in a new tab
+          // and a save dialog appeared at the same time. The opener is
+          // severed directly instead, which keeps the same protection
+          // without costing us the ability to detect a blocked popup.
+          const viewerWindow = window.open(fileUrl, "_blank");
+
+          if (viewerWindow) {
+            try {
+              viewerWindow.opener = null;
+            } catch {
+              // Cross-origin tabs will not allow this; nothing to do.
+            }
+          } else {
+            downloadInstead();
+          }
+        } else {
+          downloadInstead();
         }
       } catch (error) {
         console.error("Error opening document:", error);
@@ -871,6 +929,7 @@ const DocsFolderTree = () => {
     const handleCloseViewer = () => {
       setOpenViewer(false);
       setSelectedDoc(null);
+      setViewerMaximized(false);
     };
 
     const handleCancelClick = () => {
@@ -1068,8 +1127,21 @@ const DocsFolderTree = () => {
       }
 
       if (item.isFile) {
+        // A seal restricts what the client may CHANGE, not what they may
+        // read. Opening and downloading stay available on a sealed document;
+        // rename, move and delete below do not.
         const isLocked = item.meta?.readOnly === true;
         return [
+          {
+            // Opening a document previously meant clicking the row, which
+            // takes over the current page. This gives an explicit way to
+            // send it to its own tab and keep what you were looking at.
+            name: "Open in New Tab",
+            icon: ArrowTopRightOnSquareIcon,
+            action: "openInNewTab",
+            color: "text-blue-600",
+          },
+          { separator: true },
           {
             name: "Rename",
             icon: PencilIcon,
@@ -1085,10 +1157,10 @@ const DocsFolderTree = () => {
             color: "text-gray-600",
           },
           {
+            // Saving a copy reads the document, it does not change it.
             name: "Download",
             icon: ArrowDownTrayIcon,
             action: "download",
-            disabled: isLocked,
             color: "text-gray-600",
           },
           { separator: true },
@@ -1194,6 +1266,15 @@ const DocsFolderTree = () => {
           break;
         case "download":
           handleDownloadFile(selectedItemForPopover);
+          break;
+        case "openInNewTab":
+          // Called straight from the menu click with no await in between, so
+          // the browser still treats it as user-initiated and does not block
+          // the new tab.
+          openDocument(
+            selectedItemForPopover.path,
+            selectedItemForPopover.name,
+          );
           break;
         case "uploadFile":
           setFileUploadDrawerOpen(true);
@@ -1312,11 +1393,7 @@ const DocsFolderTree = () => {
           : false;
 
         const handleSafeFileClick = () => {
-          if (meta.readOnly) {
-            alert("This file is locked and cannot be opened.");
-            return;
-          }
-
+          // Sealed is view-only, not unopenable - see handleFileClick.
           if (!isFolder) {
             handleFileClick(fullPath, item.name, meta);
           }
@@ -1339,7 +1416,8 @@ const DocsFolderTree = () => {
             }
           `}
               style={{
-                cursor: meta.readOnly ? "not-allowed" : "pointer",
+                // Sealed rows are readable, so they take a normal pointer.
+                cursor: "pointer",
               }}
             >
               {/* CHECKBOX */}
@@ -1413,8 +1491,10 @@ const DocsFolderTree = () => {
                       transition-all duration-200
                       disabled:opacity-50
                     "
+                        // Sealing is applied recursively, so leaving this
+                        // disabled made every document beneath a sealed folder
+                        // unreachable rather than merely unmodifiable.
                         onClick={() => toggleFolder(fullPath, meta.readOnly)}
-                        disabled={meta.readOnly}
                       >
                         {expandedFolders[fullPath] ? (
                           <FolderOpenIcon color="#2563eb" className="w-5 h-5" />
@@ -1492,11 +1572,7 @@ const DocsFolderTree = () => {
                         <span
                           className={`
                         text-sm font-medium transition-all
-                        ${
-                          meta.readOnly
-                            ? "text-slate-400"
-                            : "text-blue-700 hover:text-blue-800"
-                        }
+                        ${"text-blue-700 hover:text-blue-800"}
                       `}
                           onClick={handleSafeFileClick}
                           style={{
@@ -1577,6 +1653,37 @@ const DocsFolderTree = () => {
               {/* ACTIONS */}
 
               <td className="px-5 py-4 text-right align-middle">
+                {/* "Open in New Tab" already exists in the menu below, but it
+                    is three clicks deep and easy to miss - which is why it kept
+                    being reported as absent. This puts it on the row itself for
+                    files, alongside the menu rather than instead of it.
+                    Disabled for a locked file, matching the menu entry and the
+                    row click, neither of which will open one. */}
+                <div className="inline-flex items-center gap-1">
+                  {item.type === "file" && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDocument(fullPath, item.name);
+                      }}
+                      title="Open in new tab"
+                      aria-label="Open in new tab"
+                      className="
+                        h-10 w-10 rounded-xl
+                        hover:bg-white hover:shadow-md
+                        border border-transparent
+                        hover:border-slate-200
+                        transition-all duration-200
+                        inline-flex items-center justify-center
+                        opacity-70 group-hover:opacity-100
+                        disabled:cursor-not-allowed disabled:opacity-30
+                      "
+                    >
+                      <ArrowTopRightOnSquareIcon className="w-5 h-5 text-blue-600" />
+                    </button>
+                  )}
+
                 {!hideMenu && (
                   <Popover className="relative">
                     {({ open, close }) => (
@@ -1675,6 +1782,7 @@ const DocsFolderTree = () => {
                     )}
                   </Popover>
                 )}
+                </div>
 
                 <TooltipProvider>
                   {allowDownload && (
@@ -1941,8 +2049,21 @@ const DocsFolderTree = () => {
 
         {/* ================= DOCUMENT APPROVAL DIALOG ================= */}
         {openViewer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
-            <div className="w-full max-w-5xl bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden">
+          <div
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md ${
+              viewerMaximized ? "p-0" : "p-2 sm:p-4"
+            }`}
+          >
+            {/* Was capped at max-w-5xl with a 75vh frame, which left wide
+                margins on every side and a small document. Now uses most of
+                the viewport by default, and all of it when maximised. */}
+            <div
+              className={`w-full bg-white/90 backdrop-blur-2xl shadow-2xl border border-white/30 overflow-hidden ${
+                viewerMaximized
+                  ? "max-w-none h-full rounded-none"
+                  : "max-w-[92rem] rounded-3xl"
+              }`}
+            >
               <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="h-11 w-11 rounded-2xl bg-yellow-100 flex items-center justify-center">
@@ -1960,18 +2081,43 @@ const DocsFolderTree = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleCloseViewer}
-                  className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
-                >
-                  <X className="w-5 h-5 text-slate-600" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setViewerMaximized((v) => !v)}
+                    title={viewerMaximized ? "Exit full screen" : "Full screen"}
+                    aria-label={
+                      viewerMaximized ? "Exit full screen" : "Full screen"
+                    }
+                    className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
+                  >
+                    {viewerMaximized ? (
+                      <Minimize2 className="w-5 h-5 text-slate-600" />
+                    ) : (
+                      <Maximize2 className="w-5 h-5 text-slate-600" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleCloseViewer}
+                    className="h-11 w-11 rounded-2xl hover:bg-slate-100 flex items-center justify-center transition-all"
+                  >
+                    <X className="w-5 h-5 text-slate-600" />
+                  </button>
+                </div>
               </div>
 
-              <div className="h-[75vh] bg-slate-100">
+              <div
+                className={`bg-slate-100 ${
+                  viewerMaximized ? "h-[calc(100vh-5.5rem)]" : "h-[85vh]"
+                }`}
+              >
                 {selectedDoc ? (
                   <iframe
-                    src={selectedDoc.fileUrl}
+                    // #view=FitH tells the built-in PDF viewer to fit the page
+                    // to the frame width instead of letterboxing it.
+                    src={`${selectedDoc.fileUrl}${
+                      selectedDoc.fileUrl?.includes("#") ? "&" : "#"
+                    }view=FitH`}
                     title={selectedDoc.filename}
                     className="w-full h-full"
                   />
@@ -2359,22 +2505,38 @@ const DocsFolderTree = () => {
               </div>
 
               {/* Footer */}
+              {/* Payment happens here rather than on a separate page, so the
+                  client never leaves the document they were opening. */}
+              {payingInline && (
+                <div className="max-h-[60vh] overflow-y-auto border-t border-slate-200 px-2 py-2">
+                  <PayInvoice
+                    invoices={selectedInvoiceFile?.meta?.invoices || []}
+                    accountName={accountName}
+                    onPaid={handlePaidInline}
+                  />
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 px-6 py-5 border-t border-slate-200 bg-slate-50">
                 <button
                   className="h-11 px-5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-medium transition-all"
-                  onClick={() => setInvoiceDialogOpen(false)}
+                  onClick={() => {
+                    setInvoiceDialogOpen(false);
+                    setPayingInline(false);
+                  }}
                 >
                   Close
                 </button>
 
-                {selectedInvoiceFile?.meta?.invoices?.length > 0 && (
-                  <button
-                    className="h-11 px-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg"
-                    onClick={handlePayInvoice}
-                  >
-                    Pay Invoice
-                  </button>
-                )}
+                {!payingInline &&
+                  selectedInvoiceFile?.meta?.invoices?.length > 0 && (
+                    <button
+                      className="h-11 px-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg"
+                      onClick={handlePayInvoice}
+                    >
+                      Pay Invoice
+                    </button>
+                  )}
               </div>
             </div>
           </div>

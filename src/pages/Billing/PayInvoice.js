@@ -8,7 +8,15 @@ import { CreditCard, ChevronLeft } from "lucide-react";
 // ✅ ONLY ADDED THIS
 import { invoiceAPI,accountsAPI } from "../../services/api";
 
-const PayInvoice = () => {
+// Renders either as the /payinvoice page or embedded in a dialog. When
+// embedded, the caller passes the invoices directly and an onPaid callback;
+// on the standalone route both fall back to the router state and a redirect,
+// so that path behaves exactly as it always has.
+const PayInvoice = ({
+  invoices: invoicesProp = null,
+  accountName: accountNameProp = null,
+  onPaid = null,
+}) => {
   const toast =useToast()
   const accountHolderTypeOptions = [
     { label: "Individual", value: "individual" },
@@ -21,7 +29,9 @@ const PayInvoice = () => {
   ];
 
   const location = useLocation();
-  const { selectedInvoices = [], accountName = "" } = location.state || {};
+  const routeState = location.state || {};
+  const selectedInvoices = invoicesProp ?? routeState.selectedInvoices ?? [];
+  const accountName = accountNameProp ?? routeState.accountName ?? "";
 console.log("Selected Invoices:", selectedInvoices);
 const [account, setAccount] = useState(null);
 const [accountLoading, setAccountLoading] = useState(false);
@@ -211,7 +221,14 @@ paymentMethod: invoice.paymentMethod || "",
           "Payment successful and all invoices updated!"
         );
 
-        navigate("/billing/invoices");
+        // Embedded in the locked-document dialog the caller decides what
+        // happens next - it unlocks and opens the document. Only the
+        // standalone page redirects to the invoice list.
+        if (onPaid) {
+          onPaid();
+        } else {
+          navigate("/billing/invoices");
+        }
       } else {
         toast.error(
           "Payment succeeded but some invoices failed to update"

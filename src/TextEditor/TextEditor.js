@@ -203,17 +203,43 @@ const FileUploadDrawer = ({
       }
 
       setFolderTree(treeData);
-      
-      // Auto-select first folder if available
-      // if (treeData.length > 0 && !selectedFolder) {
-      //   const firstFolder = findFirstFolder(treeData);
-      //   if (firstFolder) {
-      //     setSelectedFolder(firstFolder.path);
-      //   }
-      // }
+
+      // With this commented out, selectedFolder stayed "" and handleUpload
+      // bailed at its own guard - so attaching a file in chat picked the file
+      // and then quietly did nothing. A destination is required by the
+      // endpoint, so one has to be chosen; the client's own upload folder is
+      // the right default, with the first folder as a fallback. The user can
+      // still pick a different one before sending.
+      // The previous version only defaulted when the tree had entries, which
+      // left the real hole: an account with no documents yet lists nothing
+      // (the endpoint answers 404 when the folder does not exist on disk), so
+      // selectedFolder stayed "" and the upload refused with "Please select
+      // files and folder". The account root is always a valid destination -
+      // the upload endpoint creates the directory if it is missing - so it is
+      // the last resort rather than giving up.
+      setSelectedFolder((current) => {
+        if (current) return current;
+
+        const clientFolder = treeData.find(
+          (item) =>
+            item?.type === "folder" &&
+            String(item?.name || "")
+              .toLowerCase()
+              .includes("client uploaded"),
+        );
+        if (clientFolder?.path) return clientFolder.path;
+
+        const firstFolder = findFirstFolder(treeData);
+        if (firstFolder?.path) return firstFolder.path;
+
+        return accountId || "";
+      });
     } catch (err) {
       console.error("Error fetching folder tree:", err);
       setError("Error fetching folder tree");
+      // Even with no listing, the account root is a usable destination, so a
+      // failed fetch should not leave the user unable to send anything.
+      setSelectedFolder((current) => current || accountId || "");
       // Fallback folders
       setFolderTree([
         {
@@ -389,8 +415,18 @@ const FileUploadDrawer = ({
 //   }
 // };
 const handleUpload = async () => {
-  if (!files.length || !selectedFolder) {
-    setMessage("Please select files and folder");
+  // Said "Please select files and folder" for both causes, and rendered
+  // green because the styling below only reddens text containing "failed" -
+  // so a blocked upload looked like a confirmation.
+  if (!files.length) {
+    setMessage("Upload failed - no file selected.");
+    return;
+  }
+
+  if (!selectedFolder) {
+    setMessage(
+      "Upload failed - choose a destination folder before sending.",
+    );
     return;
   }
 
