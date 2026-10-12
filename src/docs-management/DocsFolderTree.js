@@ -1513,7 +1513,7 @@ const DocsFolderTree = () => {
                         <span
                           className={`
                         text-sm font-semibold tracking-tight
-                        ${meta.readOnly ? "text-slate-400" : "text-slate-700"}
+                        text-slate-700
                       `}
                         >
                           {item.name}
@@ -1536,18 +1536,24 @@ const DocsFolderTree = () => {
                           </span>
                         )}
 
-                        {/* LOCK */}
+                        {/* SEALED */}
+                        {/* Was "Locked" in red, which reads as an error and no
+                            longer matches the admin, where the same state is a
+                            blue "Sealed" chip. A seal is a status, not a
+                            failure - the client can still read the document,
+                            just not change it. */}
                         {meta.readOnly && (
                           <span
+                            title="Sealed - view only"
                             className="
                           inline-flex items-center
-                          px-2 py-0.5 rounded-full
-                          bg-red-50 text-red-600
-                          border border-red-200
+                          px-2 py-0.5 rounded-md
                           text-[10px] font-semibold
+                          text-white shadow-sm
                         "
+                            style={{ backgroundColor: "#1976D3" }}
                           >
-                            Locked
+                            Sealed
                           </span>
                         )}
                       </div>
@@ -1575,15 +1581,31 @@ const DocsFolderTree = () => {
                         ${"text-blue-700 hover:text-blue-800"}
                       `}
                           onClick={handleSafeFileClick}
-                          style={{
-                            cursor: meta.readOnly ? "not-allowed" : "pointer",
-                          }}
+                          style={{ cursor: "pointer" }}
                         >
                           {item.name}
                         </span>
 
                         {/* TAGS */}
                         <div className="flex flex-wrap gap-1">
+                          {/* Files carried no sealed marker at all, so a sealed
+                              document was indistinguishable from any other once
+                              the greyed-out styling was removed in v1.13.0. */}
+                          {meta.readOnly && (
+                            <span
+                              title="Sealed - view only"
+                              className="
+                              inline-flex items-center
+                              px-2 py-0.5 rounded-md
+                              text-[10px] font-semibold
+                              text-white shadow-sm
+                            "
+                              style={{ backgroundColor: "#1976D3" }}
+                            >
+                              Sealed
+                            </span>
+                          )}
+
                           {meta.newTags?.map((tag, index) => (
                             <span
                               key={index}
