@@ -380,14 +380,31 @@ const DocsFolderTree = () => {
         const data = res.data;
         console.log("Bulk trash response:", data);
         if (data.success) {
-          toast.success(
-            `${data.trashedItems.length} item(s) moved to trash successfully`,
-          );
-          if (data.failedItems?.length > 0) {
-            toast.warning(`${data.failedItems.length} item(s) failed`);
-            console.log("Failed trash items:", data.failedItems);
+          // The endpoint answers success:true whenever it ran at all, so the
+          // two arrays are the only honest signal. Report each one on its own
+          // terms instead of always claiming a success.
+          const trashed = data.trashedItems?.length ?? 0;
+          const failed = data.failedItems ?? [];
+
+          if (trashed > 0) {
+            toast.success(`${trashed} item(s) moved to trash`);
           }
-          setSelectedItems(new Set());
+
+          if (failed.length > 0) {
+            // Show the server's reason - "Not found", a missing .meta.json -
+            // rather than a bare count no one can act on.
+            const reason = failed[0]?.error ? ` (${failed[0].error})` : "";
+            const message = `${failed.length} item(s) could not be moved to trash${reason}`;
+            if (trashed > 0) toast.warning(message);
+            else toast.error(message);
+            console.log("Failed trash items:", failed);
+          }
+
+          // Keep the failures selected so they can be retried; drop the rest.
+          const failedPaths = new Set(failed.map((f) => f.path));
+          setSelectedItems(
+            new Set([...selectedItems].filter((path) => failedPaths.has(path))),
+          );
           fetchFolderTree(accountId);
         } else {
           toast.error(data.message || "Failed to trash items");
@@ -552,7 +569,9 @@ const DocsFolderTree = () => {
         }
       } catch (err) {
         console.error("Error trashing item:", err);
-        toast.error("Error moving item to trash");
+        toast.error(
+          err?.response?.data?.message || "Error moving item to trash",
+        );
       }
       handleMenuClose();
     };
