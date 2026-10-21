@@ -2367,6 +2367,7 @@ const handleBulkDownload = async () => {
                   <DocusealForm
                     src={`https://docuseal.com/s/${selectedSlug}`}
                     email={targetEmail}
+                    
                     onComplete={async (data) => {
                       console.log("Post-sign data:", data);
 

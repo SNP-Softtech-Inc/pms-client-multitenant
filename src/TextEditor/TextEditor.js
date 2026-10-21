@@ -147,162 +147,286 @@ const FolderTreeSelector = ({ items, onSelect, selectedFolder, level = 0 }) => {
 };
 
 // ================= MAIN UPLOAD DRAWER =================
-const FileUploadDrawer = ({
-  isOpen,
-  onClose,
-  accountId,
-  files: selectedFiles,
-  onConfirm,
-  onFileUploadComplete,
-}) => {
+// const FileUploadDrawer = ({
+//   isOpen,
+//   onClose,
+//   accountId,
+//   files: selectedFiles,
+//   onConfirm,
+//   onFileUploadComplete,
+// }) => {
   
-  const [uploading, setUploading] = useState(false);
-  const [files, setFiles] = useState([]);
-  const [selectedFolder, setSelectedFolder] = useState("");
-  const [folderTree, setFolderTree] = useState([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
-  const [error, setError] = useState(null);
-  const [message, setMessage] = useState("");
+//   const [uploading, setUploading] = useState(false);
+//   const [files, setFiles] = useState([]);
+//   const [selectedFolder, setSelectedFolder] = useState("");
+//   const [folderTree, setFolderTree] = useState([]);
+//   const [loadingFolders, setLoadingFolders] = useState(false);
+//   const [error, setError] = useState(null);
+//   const [message, setMessage] = useState("");
 
-  // Fetch folder tree when drawer opens
-  useEffect(() => {
-    if (isOpen && accountId) {
-      fetchFolderTree();
-    }
-  }, [isOpen, accountId]);
+//   // Fetch folder tree when drawer opens
+//   useEffect(() => {
+//     if (isOpen && accountId) {
+//       fetchFolderTree();
+//     }
+//   }, [isOpen, accountId]);
 
-  // Set files when prop changes
-  useEffect(() => {
-    if (selectedFiles && selectedFiles.length > 0) {
-      setFiles(selectedFiles);
-    }
-  }, [selectedFiles]);
+//   // Set files when prop changes
+//   useEffect(() => {
+//     if (selectedFiles && selectedFiles.length > 0) {
+//       setFiles(selectedFiles);
+//     }
+//   }, [selectedFiles]);
 
-  const fetchFolderTree = async () => {
-    if (!accountId) {
-      setError("Account ID is required");
-      return;
-    }
+//   const fetchFolderTree = async () => {
+//     if (!accountId) {
+//       setError("Account ID is required");
+//       return;
+//     }
 
-    setLoadingFolders(true);
-    setError(null);
+//     setLoadingFolders(true);
+//     setError(null);
 
-    try {
-      const res = await accountDocsAPI.clientListFoldersAndFiles(accountId);
-      console.log("Folder tree response:", res);
+//     try {
+//       const res = await accountDocsAPI.clientListFoldersAndFiles(accountId);
+//       console.log("Folder tree response:", res);
       
-      let treeData = [];
-      if (res?.data?.contents) {
-        treeData = res.data.contents;
-      } else if (res?.contents) {
-        treeData = res.contents;
-      } else if (Array.isArray(res?.data)) {
-        treeData = res.data;
-      } else if (Array.isArray(res)) {
-        treeData = res;
-      }
+//       let treeData = [];
+//       if (res?.data?.contents) {
+//         treeData = res.data.contents;
+//       } else if (res?.contents) {
+//         treeData = res.contents;
+//       } else if (Array.isArray(res?.data)) {
+//         treeData = res.data;
+//       } else if (Array.isArray(res)) {
+//         treeData = res;
+//       }
 
-      setFolderTree(treeData);
+//       setFolderTree(treeData);
 
-      // With this commented out, selectedFolder stayed "" and handleUpload
-      // bailed at its own guard - so attaching a file in chat picked the file
-      // and then quietly did nothing. A destination is required by the
-      // endpoint, so one has to be chosen; the client's own upload folder is
-      // the right default, with the first folder as a fallback. The user can
-      // still pick a different one before sending.
-      // The previous version only defaulted when the tree had entries, which
-      // left the real hole: an account with no documents yet lists nothing
-      // (the endpoint answers 404 when the folder does not exist on disk), so
-      // selectedFolder stayed "" and the upload refused with "Please select
-      // files and folder". The account root is always a valid destination -
-      // the upload endpoint creates the directory if it is missing - so it is
-      // the last resort rather than giving up.
-      setSelectedFolder((current) => {
-        if (current) return current;
+//       // With this commented out, selectedFolder stayed "" and handleUpload
+//       // bailed at its own guard - so attaching a file in chat picked the file
+//       // and then quietly did nothing. A destination is required by the
+//       // endpoint, so one has to be chosen; the client's own upload folder is
+//       // the right default, with the first folder as a fallback. The user can
+//       // still pick a different one before sending.
+//       // The previous version only defaulted when the tree had entries, which
+//       // left the real hole: an account with no documents yet lists nothing
+//       // (the endpoint answers 404 when the folder does not exist on disk), so
+//       // selectedFolder stayed "" and the upload refused with "Please select
+//       // files and folder". The account root is always a valid destination -
+//       // the upload endpoint creates the directory if it is missing - so it is
+//       // the last resort rather than giving up.
+//       setSelectedFolder((current) => {
+//         if (current) return current;
 
-        const clientFolder = treeData.find(
-          (item) =>
-            item?.type === "folder" &&
-            String(item?.name || "")
-              .toLowerCase()
-              .includes("client uploaded"),
-        );
-        if (clientFolder?.path) return clientFolder.path;
+//         const clientFolder = treeData.find(
+//           (item) =>
+//             item?.type === "folder" &&
+//             String(item?.name || "")
+//               .toLowerCase()
+//               .includes("client uploaded"),
+//         );
+//         if (clientFolder?.path) return clientFolder.path;
 
-        const firstFolder = findFirstFolder(treeData);
-        if (firstFolder?.path) return firstFolder.path;
+//         const firstFolder = findFirstFolder(treeData);
+//         if (firstFolder?.path) return firstFolder.path;
 
-        return accountId || "";
-      });
-    } catch (err) {
-      console.error("Error fetching folder tree:", err);
-      setError("Error fetching folder tree");
-      // Even with no listing, the account root is a usable destination, so a
-      // failed fetch should not leave the user unable to send anything.
-      setSelectedFolder((current) => current || accountId || "");
-      // Fallback folders
-      setFolderTree([
-        {
-          id: "client_uploaded",
-          name: "Client uploaded documents",
-          type: "folder",
-          path: "Client uploaded documents",
-          children: []
-        },
-        {
-          id: "firm_docs_shared",
-          name: "Firm docs shared with client",
-          type: "folder",
-          path: "Firm docs shared with client",
-          children: []
-        }
-      ]);
-    } finally {
-      setLoadingFolders(false);
-    }
-  };
+//         return accountId || "";
+//       });
+//     } catch (err) {
+//       console.error("Error fetching folder tree:", err);
+//       setError("Error fetching folder tree");
+//       // Even with no listing, the account root is a usable destination, so a
+//       // failed fetch should not leave the user unable to send anything.
+//       setSelectedFolder((current) => current || accountId || "");
+//       // Fallback folders
+//       setFolderTree([
+//         {
+//           id: "client_uploaded",
+//           name: "Client uploaded documents",
+//           type: "folder",
+//           path: "Client uploaded documents",
+//           children: []
+//         },
+//         {
+//           id: "firm_docs_shared",
+//           name: "Firm docs shared with client",
+//           type: "folder",
+//           path: "Firm docs shared with client",
+//           children: []
+//         }
+//       ]);
+//     } finally {
+//       setLoadingFolders(false);
+//     }
+//   };
 
-  const findFirstFolder = (items) => {
-    for (const item of items) {
-      if (item.type === "folder") {
-        return item;
-      }
-      if (item.children) {
-        const found = findFirstFolder(item.children);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
+//   const findFirstFolder = (items) => {
+//     for (const item of items) {
+//       if (item.type === "folder") {
+//         return item;
+//       }
+//       if (item.children) {
+//         const found = findFirstFolder(item.children);
+//         if (found) return found;
+//       }
+//     }
+//     return null;
+//   };
 
-  const handleFolderSelect = (path) => {
-    setSelectedFolder(path);
-  };
+//   const handleFolderSelect = (path) => {
+//     setSelectedFolder(path);
+//   };
 
-  const handleFileChange = (e) => {
-    const selected = Array.from(e.target.files);
-    const maxSize = 50 * 1024 * 1024;
+//   const handleFileChange = (e) => {
+//     const selected = Array.from(e.target.files);
+//     const maxSize = 50 * 1024 * 1024;
 
-    const validFiles = selected.filter((file) => {
-      if (file.size > maxSize) {
-        setMessage(`${file.name} exceeds 50MB`);
-        return false;
-      }
-      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
-        setMessage(`${file.name} is not allowed`);
-        return false;
-      }
-      return true;
-    });
+//     const validFiles = selected.filter((file) => {
+//       if (file.size > maxSize) {
+//         setMessage(`${file.name} exceeds 50MB`);
+//         return false;
+//       }
+//       if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+//         setMessage(`${file.name} is not allowed`);
+//         return false;
+//       }
+//       return true;
+//     });
 
-    setFiles(validFiles);
-    setMessage("");
-  };
-// In FileUploadDrawer component - update handleUpload function
+//     setFiles(validFiles);
+//     setMessage("");
+//   };
+// // In FileUploadDrawer component - update handleUpload function
 
+// // const handleUpload = async () => {
+// //   if (!files.length || !selectedFolder) {
+// //     setMessage("Please select files and folder");
+// //     return;
+// //   }
+
+// //   setUploading(true);
+// //   setMessage("");
+
+// //   try {
+// //     const formData = new FormData();
+
+// //     files.forEach((file) => formData.append("files", file));
+// //     formData.append("adminUserName", user?.username || "Unknown");
+
+// //     const res = await accountDocsAPI.uploadFile(formData, selectedFolder);
+
+// //     console.log("Upload response:", res);
+
+// //     if (res.status === 200 || res.status === 201) {
+// //       // Files returned from the upload API
+// //       const uploadedFiles = res.data?.files || [];
+
+// //       // Your website base URL
+// //       const baseUrl = "https://www.snptaxes.com";
+
+// //       const fileLinks = uploadedFiles.map((file, index) => {
+// //         const fileName =
+// //           file.originalname || file.filename || `File ${index + 1}`;
+
+// //         const fileSize = file.size || 0;
+
+// //         const sizeKB = Math.round(fileSize / 1024);
+// //         const sizeStr =
+// //           sizeKB > 1024
+// //             ? `${(sizeKB / 1024).toFixed(1)} MB`
+// //             : `${sizeKB} KB`;
+
+// //         // Convert absolute server path to public URL
+// //         // Example:
+// //         // /var/www/pms-backend-multitenant/folder-mangement/uploads/accounts/...
+// //         // ->
+// //         // https://www.snptaxes.com/uploads/accounts/...
+// //         let fileUrl = "#";
+
+// //         if (file.path) {
+// //           const publicPath = file.path
+// //             .replace(/\\/g, "/")
+// //             .replace(
+// //               "/var/www/pms-backend-multitenant/folder-mangement/",
+// //               ""
+// //             );
+
+// //           fileUrl = `${baseUrl}/${encodeURI(publicPath)}`;
+// //         }
+
+// //         return `
+// //           <a
+// //             href="${fileUrl}"
+// //             target="_blank"
+// //             rel="noopener noreferrer"
+// //             style="
+// //               color:#1976d2;
+// //               text-decoration:none;
+// //               font-weight:500;
+
+// //               padding:2px 0;
+// //               display:inline-block;
+// //             "
+// //           >
+// //             📎 ${fileName}
+// //           </a>
+        
+// //         `;
+// //       });
+// //         // <span style="color:#666;font-size:12px;">
+// //         //     (${sizeStr})
+// //         //   </span>
+
+// //       const fileMessage = fileLinks.join("<br>");
+
+// //       // Send HTML message to chat
+// //       if (onFileUploadComplete) {
+// //         onFileUploadComplete(uploadedFiles, fileMessage, true);
+// //       }
+
+// //       if (onConfirm) {
+// //         onConfirm(selectedFolder, uploadedFiles);
+// //       }
+
+// //       setMessage(`${uploadedFiles.length} file(s) uploaded successfully!`);
+
+// //       setTimeout(() => {
+// //         setFiles([]);
+// //         setSelectedFolder("");
+// //         setMessage("");
+// //         setUploading(false);
+// //         onClose();
+// //       }, 1000);
+// //     } else {
+// //       throw new Error(res.data?.message || "Upload failed");
+// //     }
+// //   } catch (err) {
+// //     console.error("Upload failed:", err);
+
+// //     setMessage(
+// //       `Upload failed: ${
+// //         err.response?.data?.message || err.message || "Unknown error"
+// //       }`
+// //     );
+// //   } finally {
+// //     setUploading(false);
+// //   }
+// // };
 // const handleUpload = async () => {
-//   if (!files.length || !selectedFolder) {
-//     setMessage("Please select files and folder");
+//   // Said "Please select files and folder" for both causes, and rendered
+//   // green because the styling below only reddens text containing "failed" -
+//   // so a blocked upload looked like a confirmation.
+//   if (!files.length) {
+//     setMessage("Upload failed - no file selected.");
+//     return;
+//   }
+
+//   if (!selectedFolder) {
+//     setMessage(
+//       "Upload failed - choose a destination folder before sending.",
+//     );
 //     return;
 //   }
 
@@ -311,77 +435,86 @@ const FileUploadDrawer = ({
 
 //   try {
 //     const formData = new FormData();
-
 //     files.forEach((file) => formData.append("files", file));
-//     formData.append("adminUserName", user?.username || "Unknown");
-
+//     // formData.append("adminUserName", user?.username || "Unknown");
+//     formData.append("accountId", accountId);
 //     const res = await accountDocsAPI.uploadFile(formData, selectedFolder);
-
 //     console.log("Upload response:", res);
 
 //     if (res.status === 200 || res.status === 201) {
-//       // Files returned from the upload API
 //       const uploadedFiles = res.data?.files || [];
+//       const baseUrl = process.env.REACT_APP_FOLDER_MANAGEMENT;
 
-//       // Your website base URL
-//       const baseUrl = "https://www.snptaxes.com";
+//       // Helper function to check if file is an image
+//       const isImageFile = (file) => {
+//         const fileName = file.originalname || file.filename || file.name || '';
+//         const ext = fileName.split('.').pop()?.toLowerCase();
+//         return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'ico'].includes(ext);
+//       };
 
-//       const fileLinks = uploadedFiles.map((file, index) => {
-//         const fileName =
-//           file.originalname || file.filename || `File ${index + 1}`;
-
+//       // Generate HTML for files - images as actual images, others as links
+//       let fileHtml = '';
+      
+//       uploadedFiles.forEach((file) => {
+//         const fileName = file.originalname || file.filename || file.name || 'file';
 //         const fileSize = file.size || 0;
-
 //         const sizeKB = Math.round(fileSize / 1024);
-//         const sizeStr =
-//           sizeKB > 1024
-//             ? `${(sizeKB / 1024).toFixed(1)} MB`
-//             : `${sizeKB} KB`;
-
-//         // Convert absolute server path to public URL
-//         // Example:
-//         // /var/www/pms-backend-multitenant/folder-mangement/uploads/accounts/...
-//         // ->
-//         // https://www.snptaxes.com/uploads/accounts/...
-//         let fileUrl = "#";
-
-//         if (file.path) {
-//           const publicPath = file.path
-//             .replace(/\\/g, "/")
-//             .replace(
-//               "/var/www/pms-backend-multitenant/folder-mangement/",
-//               ""
-//             );
-
-//           fileUrl = `${baseUrl}/${encodeURI(publicPath)}`;
-//         }
-
-//         return `
-//           <a
-//             href="${fileUrl}"
-//             target="_blank"
-//             rel="noopener noreferrer"
-//             style="
-//               color:#1976d2;
-//               text-decoration:none;
-//               font-weight:500;
-
-//               padding:2px 0;
-//               display:inline-block;
-//             "
-//           >
-//             📎 ${fileName}
-//           </a>
+//         const sizeStr = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`;
         
-//         `;
+//         if (file.path) {
+//           // The disk root differs per environment/deployment
+//           // (.../pms-backend-multitenant/... in production,
+//           // .../pms-backend-staging/... on staging), so stripping a
+//           // hardcoded production root here left staging URLs broken.
+//           // "uploads/accounts/" is the one path segment that's the same
+//           // everywhere, matching the pattern already used elsewhere in
+//           // this codebase for the same reason.
+//           const relativePath = file.path
+//             .replace(/\\/g, "/")
+//             .split("/uploads/accounts/")[1];
+//           const fileUrl = `${baseUrl}/uploads/accounts/${encodeURI(relativePath)}`;
+          
+//           if (isImageFile(file)) {
+//             // For images - display the actual image with click to enlarge
+//             fileHtml += `
+//               <div style=" display: inline-block; max-width: 100%;">
+//                 <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" 
+//                    style="display: block; text-decoration: none;">
+//                   <img src="${fileUrl}" alt="${fileName}" 
+//                     style=" width: auto; height: auto;
+//                            border-radius: 8px; border: 1px solid #e0e0e0; 
+//                            cursor: pointer; object-fit: contain;
+//                            background: #f5f5f5; padding: 4px;
+//                            transition: transform 0.2s, box-shadow 0.2s;"
+//                     onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)';"
+//                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';"
+//                   />
+//                 </a>
+//               </div>
+//             `;
+//                             // <div style="font-size: 11px; color: #888; margin-top: 4px; text-align: center; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+//                 //   ${fileName} (${sizeStr})
+//                 // </div>
+
+//           } else {
+//             // For non-image files - show as links
+//             fileHtml += `
+//               <div >
+//                 <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" 
+//                   style="color: #1976d2; text-decoration: none; font-weight: 500; 
+//                         display: inline-block; padding: 2px 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+//                   📎 ${fileName}
+//                   <span style="color: #666; font-size: 12px; font-weight: normal;">(${sizeStr})</span>
+//                 </a>
+//               </div>
+//             `;
+//           }
+//         }
 //       });
-//         // <span style="color:#666;font-size:12px;">
-//         //     (${sizeStr})
-//         //   </span>
 
-//       const fileMessage = fileLinks.join("<br>");
+//       const fileMessage = fileHtml;
 
-//       // Send HTML message to chat
+//       // Send to parent component with HTML flag
 //       if (onFileUploadComplete) {
 //         onFileUploadComplete(uploadedFiles, fileMessage, true);
 //       }
@@ -404,7 +537,6 @@ const FileUploadDrawer = ({
 //     }
 //   } catch (err) {
 //     console.error("Upload failed:", err);
-
 //     setMessage(
 //       `Upload failed: ${
 //         err.response?.data?.message || err.message || "Unknown error"
@@ -414,107 +546,538 @@ const FileUploadDrawer = ({
 //     setUploading(false);
 //   }
 // };
-const handleUpload = async () => {
-  // Said "Please select files and folder" for both causes, and rendered
-  // green because the styling below only reddens text containing "failed" -
-  // so a blocked upload looked like a confirmation.
-  if (!files.length) {
-    setMessage("Upload failed - no file selected.");
-    return;
-  }
+//   // Remove file from list
+//   const removeFile = (index) => {
+//     setFiles(files.filter((_, i) => i !== index));
+//   };
 
-  if (!selectedFolder) {
-    setMessage(
-      "Upload failed - choose a destination folder before sending.",
-    );
-    return;
-  }
+//   if (!isOpen) return null;
 
-  setUploading(true);
-  setMessage("");
+//   const fileCount = files?.length || 0;
 
-  try {
-    const formData = new FormData();
-    files.forEach((file) => formData.append("files", file));
-    // formData.append("adminUserName", user?.username || "Unknown");
-    formData.append("accountId", accountId);
-    const res = await accountDocsAPI.uploadFile(formData, selectedFolder);
-    console.log("Upload response:", res);
+//   return (
+//     <>
+//       {/* Overlay */}
+//       <div
+//         onClick={onClose}
+//         style={{
+//           position: "fixed",
+//           top: 0,
+//           left: 0,
+//           right: 0,
+//           bottom: 0,
+//           backgroundColor: "rgba(0, 0, 0, 0.5)",
+//           zIndex: 99998,
+//           animation: "fadeIn 0.3s ease",
+//         }}
+//       />
 
-    if (res.status === 200 || res.status === 201) {
-      const uploadedFiles = res.data?.files || [];
-      const baseUrl = process.env.REACT_APP_FOLDER_MANAGEMENT;
+//       {/* Left Drawer */}
+//       <div
+//         style={{
+//           position: "fixed",
+//           top: 0,
+//           left: 0,
+//           bottom: 0,
+//           width: "450px",
+//           maxWidth: "90%",
+//           background: "white",
+//           zIndex: 99999,
+//           boxShadow: "4px 0 24px rgba(0,0,0,0.15)",
+//           display: "flex",
+//           flexDirection: "column",
+//           animation: "slideIn 0.3s ease",
+//         }}
+//       >
+//         {/* Header */}
+//         <div
+//           style={{
+//             display: "flex",
+//             alignItems: "center",
+//             justifyContent: "space-between",
+//             padding: "16px 20px",
+//             borderBottom: "1px solid #e8ecf0",
+//             flexShrink: 0,
+//           }}
+//         >
+//           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+//             <span style={{ fontSize: "20px" }}>📎</span>
+//             <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0, color: "#1a1a1a" }}>
+//               Upload File{fileCount > 1 ? 's' : ''}
+//             </h2>
+//           </div>
+//           <button
+//             onClick={onClose}
+//             style={{
+//               background: "none",
+//               border: "none",
+//               fontSize: "20px",
+//               cursor: "pointer",
+//               color: "#666",
+//               padding: "4px 8px",
+//               borderRadius: "4px",
+//               transition: "background 0.2s",
+//             }}
+//             onMouseEnter={(e) => e.currentTarget.style.background = "#f0f0f0"}
+//             onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+//           >
+//             ✕
+//           </button>
+//         </div>
 
-      // Helper function to check if file is an image
-      const isImageFile = (file) => {
-        const fileName = file.originalname || file.filename || file.name || '';
-        const ext = fileName.split('.').pop()?.toLowerCase();
-        return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'ico'].includes(ext);
-      };
+//         {/* Body */}
+//         <div
+//           style={{
+//             flex: 1,
+//             overflowY: "auto",
+//             padding: "20px",
+//             display: "flex",
+//             flexDirection: "column",
+//             gap: "16px",
+//           }}
+//         >
+         
 
-      // Generate HTML for files - images as actual images, others as links
-      let fileHtml = '';
-      
-      uploadedFiles.forEach((file) => {
-        const fileName = file.originalname || file.filename || file.name || 'file';
-        const fileSize = file.size || 0;
-        const sizeKB = Math.round(fileSize / 1024);
-        const sizeStr = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`;
-        
-        if (file.path) {
-          // The disk root differs per environment/deployment
-          // (.../pms-backend-multitenant/... in production,
-          // .../pms-backend-staging/... on staging), so stripping a
-          // hardcoded production root here left staging URLs broken.
-          // "uploads/accounts/" is the one path segment that's the same
-          // everywhere, matching the pattern already used elsewhere in
-          // this codebase for the same reason.
-          const relativePath = file.path
-            .replace(/\\/g, "/")
-            .split("/uploads/accounts/")[1];
-          const fileUrl = `${baseUrl}/uploads/accounts/${encodeURI(relativePath)}`;
+//           {/* Selected files list */}
+//           {files.length > 0 && (
+//             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+//               {Array.from(files).map((f, i) => (
+//                 <div
+//                   key={i}
+//                   style={{
+//                     display: "flex",
+//                     alignItems: "center",
+//                     gap: "8px",
+//                     borderRadius: "8px",
+//                     background: "#f5f7fa",
+//                     padding: "8px 12px",
+//                     fontSize: "13px",
+//                     color: "#1a1a1a",
+//                   }}
+//                 >
+//                   <span>📄</span>
+//                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+//                     {f.name}
+//                   </span>
+//                   <span style={{ fontSize: "11px", color: "#666", whiteSpace: "nowrap" }}>
+//                     {Math.round(f.size / 1024)} KB
+//                   </span>
+//                   <button
+//                     onClick={() => removeFile(i)}
+//                     style={{
+//                       background: "none",
+//                       border: "none",
+//                       cursor: "pointer",
+//                       color: "#999",
+//                       fontSize: "16px",
+//                       padding: "0 4px",
+//                     }}
+//                     onMouseEnter={(e) => e.currentTarget.style.color = "#d32f2f"}
+//                     onMouseLeave={(e) => e.currentTarget.style.color = "#999"}
+//                   >
+//                     ×
+//                   </button>
+//                 </div>
+//               ))}
+//             </div>
+//           )}
+
+//           {/* Message */}
+//           {message && (
+//             <div
+//               style={{
+//                 padding: "8px 12px",
+//                 borderRadius: "6px",
+//                 fontSize: "13px",
+//                 background: message.includes("failed") ? "#ffebee" : "#e8f5e9",
+//                 color: message.includes("failed") ? "#c62828" : "#2e7d32",
+//               }}
+//             >
+//               {message}
+//             </div>
+//           )}
+
+//           {/* Folder tree */}
+//           <div>
+//             <p style={{ fontSize: "14px", fontWeight: 500, margin: "0 0 8px", color: "#1a1a1a" }}>
+//               Select Folder
+//             </p>
+//             <div
+//               style={{
+//                 borderRadius: "8px",
+//                 border: "1px solid #e8ecf0",
+//                 background: "white",
+//                 overflow: "auto",
+//                 maxHeight: "280px",
+//               }}
+//             >
+//               {loadingFolders ? (
+//                 <div style={{ padding: "20px", textAlign: "center", color: "#666" }}>
+//                   <div style={{
+//                     width: "24px",
+//                     height: "24px",
+//                     border: "3px solid #f3f3f3",
+//                     borderTop: "3px solid #1976d2",
+//                     borderRadius: "50%",
+//                     animation: "spin 1s linear infinite",
+//                     margin: "0 auto 8px",
+//                   }} />
+//                   Loading folders...
+//                 </div>
+//               ) : error ? (
+//                 <div style={{ padding: "16px", textAlign: "center", color: "#d32f2f" }}>
+//                   ⚠️ {error}
+//                 </div>
+//               ) : folderTree.length === 0 ? (
+//                 <div style={{ padding: "16px", textAlign: "center", color: "#666" }}>
+//                   No folders available
+//                 </div>
+//               ) : (
+//                 <FolderTreeSelector
+//                   items={folderTree}
+//                   onSelect={handleFolderSelect}
+//                   selectedFolder={selectedFolder}
+//                 />
+//               )}
+//             </div>
+//           </div>
+
           
-          if (isImageFile(file)) {
-            // For images - display the actual image with click to enlarge
-            fileHtml += `
-              <div style=" display: inline-block; max-width: 100%;">
-                <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" 
-                   style="display: block; text-decoration: none;">
-                  <img src="${fileUrl}" alt="${fileName}" 
-                    style=" width: auto; height: auto;
-                           border-radius: 8px; border: 1px solid #e0e0e0; 
-                           cursor: pointer; object-fit: contain;
-                           background: #f5f5f5; padding: 4px;
-                           transition: transform 0.2s, box-shadow 0.2s;"
-                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)';"
-                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';"
-                  />
-                </a>
-              </div>
-            `;
-                            // <div style="font-size: 11px; color: #888; margin-top: 4px; text-align: center; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                //   ${fileName} (${sizeStr})
-                // </div>
+//         </div>
 
-          } else {
-            // For non-image files - show as links
-            fileHtml += `
-              <div >
-                <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" 
-                  style="color: #1976d2; text-decoration: none; font-weight: 500; 
-                        display: inline-block; padding: 2px 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                  📎 ${fileName}
-                  <span style="color: #666; font-size: 12px; font-weight: normal;">(${sizeStr})</span>
-                </a>
-              </div>
-            `;
+//         {/* Footer */}
+//         <div
+//           style={{
+//             display: "flex",
+//             alignItems: "center",
+//             justifyContent: "flex-end",
+//             gap: "12px",
+//             padding: "16px 20px",
+//             borderTop: "1px solid #e8ecf0",
+//             flexShrink: 0,
+//             background: "#fafafa",
+//           }}
+//         >
+//           <button
+//             onClick={onClose}
+//             style={{
+//               padding: "10px 20px",
+//               borderRadius: "8px",
+//               border: "1px solid #d0d5dd",
+//               background: "white",
+//               cursor: "pointer",
+//               fontSize: "14px",
+//               fontWeight: 500,
+//               color: "#333",
+//               transition: "all 0.2s",
+//               flex: 1,
+//             }}
+//             onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
+//             onMouseLeave={(e) => e.currentTarget.style.background = "white"}
+//           >
+//             Cancel
+//           </button>
+//           <button
+//             onClick={handleUpload}
+//             disabled={uploading || !files.length || !selectedFolder}
+//             style={{
+//               padding: "10px 20px",
+//               borderRadius: "8px",
+//               border: "none",
+//               background: (!uploading && files.length && selectedFolder) ? "#1976d2" : "#e8ecf0",
+//               color: (!uploading && files.length && selectedFolder) ? "white" : "#999",
+//               cursor: (!uploading && files.length && selectedFolder) ? "pointer" : "not-allowed",
+//               fontSize: "14px",
+//               fontWeight: 500,
+//               transition: "all 0.2s",
+//               flex: 1,
+//             }}
+//             onMouseEnter={(e) => {
+//               if (!uploading && files.length && selectedFolder) {
+//                 e.currentTarget.style.background = "#1565c0";
+//               }
+//             }}
+//             onMouseLeave={(e) => {
+//               if (!uploading && files.length && selectedFolder) {
+//                 e.currentTarget.style.background = "#1976d2";
+//               }
+//             }}
+//           >
+//             {uploading ? "Uploading..." : "Upload"}
+//           </button>
+//         </div>
+//       </div>
+
+//       <style>{`
+//         @keyframes slideIn {
+//           from {
+//             transform: translateX(-100%);
+//           }
+//           to {
+//             transform: translateX(0);
+//           }
+//         }
+//         @keyframes fadeIn {
+//           from {
+//             opacity: 0;
+//           }
+//           to {
+//             opacity: 1;
+//           }
+//         }
+//         @keyframes spin {
+//           0% { transform: rotate(0deg); }
+//           100% { transform: rotate(360deg); }
+//         }
+//       `}</style>
+//     </>
+//   );
+// };
+// ================= MAIN UPLOAD DRAWER =================
+// Drop-in replacement for the FileUploadDrawer in your TextEditor file.
+// Relies on what that file already has in scope: useState, useEffect,
+// accountDocsAPI and FolderTreeSelector.
+
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "tiff", "ico"];
+const UPLOAD_MARKER = "uploads/accounts/";
+
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+
+const getFileName = (file) =>
+  file.originalname || file.filename || file.name || "file";
+
+const isImageFile = (file) =>
+  IMAGE_EXTENSIONS.includes(getFileName(file).split(".").pop()?.toLowerCase());
+
+const formatSize = (bytes = 0) => {
+  const kb = Math.round(bytes / 1024);
+  return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+};
+
+// Turns whatever the server returns (absolute disk path, relative path,
+// Windows path or full URL) into a public URL. The disk root differs per
+// deployment, so "uploads/accounts/" is the anchor, not a hardcoded root.
+const toPublicUrl = (file) => {
+  const baseUrl = (process.env.REACT_APP_FOLDER_MANAGEMENT || "").replace(/\/+$/, "");
+  const raw = file.url || file.fileUrl || file.location || file.path || file.filePath || "";
+
+  // This API returns no path, only the folder (relative to uploads/accounts/)
+  // and the file name, e.g. folder "<accountId>/Client uploaded documents/2018".
+  if (!raw && file.folder) {
+    const folderPath = String(file.folder).replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    const segments = [...folderPath.split("/"), getFileName(file)];
+    return `${baseUrl}/${UPLOAD_MARKER}${segments.map(encodeURIComponent).join("/")}`;
+  }
+
+  if (!raw) return null;
+
+  const normalized = String(raw).replace(/\\/g, "/");
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+
+  const idx = normalized.indexOf(UPLOAD_MARKER);
+  if (idx === -1) return null;
+
+  const relative = normalized.slice(idx + UPLOAD_MARKER.length);
+  const encoded = relative.split("/").map(encodeURIComponent).join("/");
+  return `${baseUrl}/${UPLOAD_MARKER}${encoded}`;
+};
+
+// Builds the chat HTML for one uploaded file. Never returns an empty string,
+// so the chat always has something to send.
+const buildFileHtml = (file) => {
+  const name = escapeHtml(getFileName(file));
+  const size = formatSize(file.size);
+  const url = toPublicUrl(file);
+
+  if (!url) {
+    console.warn("No usable path/url on uploaded file:", file);
+    return `<div>📎 ${name} <span style="color:#666;font-size:12px;">(${size})</span></div>`;
+  }
+
+  if (isImageFile(file)) {
+    return `<div style="display:inline-block;max-width:100%;">
+  <a href="${url}" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;">
+    <img src="${url}" alt="${name}" style="max-width:280px;width:auto;height:auto;border-radius:8px;border:1px solid #e0e0e0;object-fit:contain;background:#f5f5f5;padding:4px;cursor:pointer;" />
+  </a>
+</div>`;
+  }
+
+  return `<div>
+  <a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#1976d2;text-decoration:none;font-weight:500;display:inline-block;padding:2px 0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+    📎 ${name} <span style="color:#666;font-size:12px;font-weight:normal;">(${size})</span>
+  </a>
+</div>`;
+};
+
+const FileUploadDrawer = ({
+  isOpen,
+  onClose,
+  accountId,
+  files: selectedFiles,
+  onConfirm,
+  onFileUploadComplete,
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const [files, setFiles] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState("");
+  const [folderTree, setFolderTree] = useState([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState("");
+
+  // Fetch folder tree when drawer opens
+  useEffect(() => {
+    if (isOpen && accountId) {
+      fetchFolderTree();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, accountId]);
+
+  // Set files when prop changes
+  useEffect(() => {
+    if (selectedFiles && selectedFiles.length > 0) {
+      setFiles(selectedFiles);
+    }
+  }, [selectedFiles]);
+
+  const findFirstFolder = (items) => {
+    for (const item of items) {
+      if (item.type === "folder") return item;
+      if (item.children) {
+        const found = findFirstFolder(item.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const fetchFolderTree = async () => {
+    if (!accountId) {
+      setError("Account ID is required");
+      return;
+    }
+
+    setLoadingFolders(true);
+    setError(null);
+
+    try {
+      const res = await accountDocsAPI.clientListFoldersAndFiles(accountId);
+      console.log("Folder tree response:", res);
+
+      let treeData = [];
+      if (res?.data?.contents) {
+        treeData = res.data.contents;
+      } else if (res?.contents) {
+        treeData = res.contents;
+      } else if (Array.isArray(res?.data)) {
+        treeData = res.data;
+      } else if (Array.isArray(res)) {
+        treeData = res;
+      }
+
+      setFolderTree(treeData);
+
+      // Default destination: the client's upload folder, then the first
+      // folder, then the account root (the upload endpoint creates it if
+      // missing). The user can still pick another folder before sending.
+      setSelectedFolder((current) => {
+        if (current) return current;
+
+        const clientFolder = treeData.find(
+          (item) =>
+            item?.type === "folder" &&
+            String(item?.name || "").toLowerCase().includes("client uploaded"),
+        );
+        if (clientFolder?.path) return clientFolder.path;
+
+        const firstFolder = findFirstFolder(treeData);
+        if (firstFolder?.path) return firstFolder.path;
+
+        return accountId || "";
+      });
+    } catch (err) {
+      console.error("Error fetching folder tree:", err);
+      setError("Error fetching folder tree");
+      // The account root is still a usable destination.
+      setSelectedFolder((current) => current || accountId || "");
+      setFolderTree([
+        {
+          id: "client_uploaded",
+          name: "Client uploaded documents",
+          type: "folder",
+          path: "Client uploaded documents",
+          children: [],
+        },
+        {
+          id: "firm_docs_shared",
+          name: "Firm docs shared with client",
+          type: "folder",
+          path: "Firm docs shared with client",
+          children: [],
+        },
+      ]);
+    } finally {
+      setLoadingFolders(false);
+    }
+  };
+
+  const handleFolderSelect = (path) => {
+    setSelectedFolder(path);
+  };
+
+  const handleUpload = async () => {
+    if (!files.length) {
+      setMessage("Upload failed - no file selected.");
+      return;
+    }
+
+    if (!selectedFolder) {
+      setMessage("Upload failed - choose a destination folder before sending.");
+      return;
+    }
+
+    setUploading(true);
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      formData.append("accountId", accountId);
+
+      const res = await accountDocsAPI.uploadFile(formData, selectedFolder);
+      console.log("Upload response:", res);
+
+      if (res.status !== 200 && res.status !== 201) {
+        throw new Error(res.data?.message || "Upload failed");
+      }
+
+      // The endpoint answers with the whole folder in data.folderMeta.files,
+      // not just the new files, so pick out the ones that were just sent.
+      // If one can't be matched (e.g. the server renamed it), fall back to
+      // the local file and the folder it was sent to.
+      const returned =
+        res.data?.files || res.data?.folderMeta?.files || res.files || [];
+
+      const uploadedFiles = files.map((sent) => {
+        const matches = returned.filter((f) => getFileName(f) === sent.name);
+        return (
+          matches[matches.length - 1] || {
+            name: sent.name,
+            size: sent.size,
+            folder: selectedFolder,
           }
-        }
+        );
       });
 
-      const fileMessage = fileHtml;
+      const fileMessage = uploadedFiles.map(buildFileHtml).join("");
 
-      // Send to parent component with HTML flag
       if (onFileUploadComplete) {
         onFileUploadComplete(uploadedFiles, fileMessage, true);
       }
@@ -529,31 +1092,26 @@ const handleUpload = async () => {
         setFiles([]);
         setSelectedFolder("");
         setMessage("");
-        setUploading(false);
         onClose();
       }, 1000);
-    } else {
-      throw new Error(res.data?.message || "Upload failed");
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setMessage(
+        `Upload failed: ${err.response?.data?.message || err.message || "Unknown error"}`,
+      );
+    } finally {
+      setUploading(false);
     }
-  } catch (err) {
-    console.error("Upload failed:", err);
-    setMessage(
-      `Upload failed: ${
-        err.response?.data?.message || err.message || "Unknown error"
-      }`
-    );
-  } finally {
-    setUploading(false);
-  }
-};
-  // Remove file from list
+  };
+
   const removeFile = (index) => {
-    setFiles(files.filter((_, i) => i !== index));
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   if (!isOpen) return null;
 
   const fileCount = files?.length || 0;
+  const canUpload = !uploading && files.length > 0 && !!selectedFolder;
 
   return (
     <>
@@ -603,7 +1161,7 @@ const handleUpload = async () => {
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "20px" }}>📎</span>
             <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0, color: "#1a1a1a" }}>
-              Upload File{fileCount > 1 ? 's' : ''}
+              Upload File{fileCount > 1 ? "s" : ""}
             </h2>
           </div>
           <button
@@ -618,8 +1176,9 @@ const handleUpload = async () => {
               borderRadius: "4px",
               transition: "background 0.2s",
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "#f0f0f0"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f0f0")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            aria-label="Close upload drawer"
           >
             ✕
           </button>
@@ -636,14 +1195,12 @@ const handleUpload = async () => {
             gap: "16px",
           }}
         >
-         
-
           {/* Selected files list */}
           {files.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               {Array.from(files).map((f, i) => (
                 <div
-                  key={i}
+                  key={`${f.name}-${i}`}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -656,7 +1213,14 @@ const handleUpload = async () => {
                   }}
                 >
                   <span>📄</span>
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {f.name}
                   </span>
                   <span style={{ fontSize: "11px", color: "#666", whiteSpace: "nowrap" }}>
@@ -672,8 +1236,9 @@ const handleUpload = async () => {
                       fontSize: "16px",
                       padding: "0 4px",
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = "#d32f2f"}
-                    onMouseLeave={(e) => e.currentTarget.style.color = "#999"}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#d32f2f")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "#999")}
+                    aria-label={`Remove ${f.name}`}
                   >
                     ×
                   </button>
@@ -713,15 +1278,17 @@ const handleUpload = async () => {
             >
               {loadingFolders ? (
                 <div style={{ padding: "20px", textAlign: "center", color: "#666" }}>
-                  <div style={{
-                    width: "24px",
-                    height: "24px",
-                    border: "3px solid #f3f3f3",
-                    borderTop: "3px solid #1976d2",
-                    borderRadius: "50%",
-                    animation: "spin 1s linear infinite",
-                    margin: "0 auto 8px",
-                  }} />
+                  <div
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      border: "3px solid #f3f3f3",
+                      borderTop: "3px solid #1976d2",
+                      borderRadius: "50%",
+                      animation: "spin 1s linear infinite",
+                      margin: "0 auto 8px",
+                    }}
+                  />
                   Loading folders...
                 </div>
               ) : error ? (
@@ -730,7 +1297,7 @@ const handleUpload = async () => {
                 </div>
               ) : folderTree.length === 0 ? (
                 <div style={{ padding: "16px", textAlign: "center", color: "#666" }}>
-                  No folders available
+                  No folders yet - files will go to the account's root folder.
                 </div>
               ) : (
                 <FolderTreeSelector
@@ -741,8 +1308,6 @@ const handleUpload = async () => {
               )}
             </div>
           </div>
-
-          
         </div>
 
         {/* Footer */}
@@ -772,35 +1337,31 @@ const handleUpload = async () => {
               transition: "all 0.2s",
               flex: 1,
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "#f5f5f5"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "white"}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
           >
             Cancel
           </button>
           <button
             onClick={handleUpload}
-            disabled={uploading || !files.length || !selectedFolder}
+            disabled={!canUpload}
             style={{
               padding: "10px 20px",
               borderRadius: "8px",
               border: "none",
-              background: (!uploading && files.length && selectedFolder) ? "#1976d2" : "#e8ecf0",
-              color: (!uploading && files.length && selectedFolder) ? "white" : "#999",
-              cursor: (!uploading && files.length && selectedFolder) ? "pointer" : "not-allowed",
+              background: canUpload ? "#1976d2" : "#e8ecf0",
+              color: canUpload ? "white" : "#999",
+              cursor: canUpload ? "pointer" : "not-allowed",
               fontSize: "14px",
               fontWeight: 500,
               transition: "all 0.2s",
               flex: 1,
             }}
             onMouseEnter={(e) => {
-              if (!uploading && files.length && selectedFolder) {
-                e.currentTarget.style.background = "#1565c0";
-              }
+              if (canUpload) e.currentTarget.style.background = "#1565c0";
             }}
             onMouseLeave={(e) => {
-              if (!uploading && files.length && selectedFolder) {
-                e.currentTarget.style.background = "#1976d2";
-              }
+              if (canUpload) e.currentTarget.style.background = "#1976d2";
             }}
           >
             {uploading ? "Uploading..." : "Upload"}
@@ -810,20 +1371,12 @@ const handleUpload = async () => {
 
       <style>{`
         @keyframes slideIn {
-          from {
-            transform: translateX(-100%);
-          }
-          to {
-            transform: translateX(0);
-          }
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
         }
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -1191,7 +1744,12 @@ export default function TextEditor({
         data={value}
         config={{
           licenseKey: "GPL",
-
+attachFile: {
+  onClick: (editor) => {
+    editorRef.current = editor;
+    fileInputRef.current?.click();
+  },
+},
           plugins: [
             Essentials,
             Paragraph,
