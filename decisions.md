@@ -8,6 +8,45 @@ this way?" — not for routine edits. Update it in the same commit as the code.
 
 ---
 
+## 2026-10-24 · Test harness (staging only)
+
+### A static guard against module-scope hooks
+
+The only test here was Create React App boilerplate asserting the app
+renders a "learn react" link. It does not — the test had been failing
+silently because nobody ran it. Removed.
+
+**What replaced it: `src/__tests__/noModuleScopeHooks.test.js`**, the same
+guard added to the admin app. It parses all 126 source files with
+`@babel/parser` and fails any `use*` call with no function parent.
+
+**Why this one first:** a hook at module scope throws on *import*, so it
+does not break one screen — it kills every route, as a white page, while
+the build still succeeds. That outage happened in the admin app (v1.48.0),
+caused by an edit anchored on text that matched a commented-out copy of the
+component. This app has its own large files — `DocsFolderTree.js` at 2,675
+lines and `FolderTreeView.js` at 2,624 — so the same mistake is available
+here.
+
+**Why static rather than a render test:** no provider tree to construct, it
+covers every file rather than the few a render test reaches, and it runs in
+seconds. Five self-tests prove the detector actually detects, so a green run
+means something.
+
+### Render and component tests are likely blocked here too
+
+The admin app hit a chain of failures attempting an import smoke test:
+`react-router-dom@7`'s `main` field points at a file that does not exist,
+CRA 5's jest 27 cannot read exports maps, jsdom lacks `TextEncoder`, and
+then an untransformed ESM dependency. This app is on `react-router-dom@7.5.3`
+and the same CRA version, so expect the same.
+
+That work was not repeated here, since nothing yet needs it. If a component
+test is wanted, read the admin app's decisions.md first — the first three
+steps are already solved there and can be copied.
+
+---
+
 ## v1.15.0 · `c406ef8`
 
 ### Report bulk trash honestly instead of claiming success
