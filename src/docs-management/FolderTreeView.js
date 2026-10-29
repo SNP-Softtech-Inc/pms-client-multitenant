@@ -280,6 +280,7 @@ const FolderTreeView = ({ accountId }) => {
   const SIGN_STATUSES = [
     "sendForSignature",
     "pendingSignature",
+    "partiallySigned",
     "signatureCompleted",
   ];
   const APPROVAL_STATUSES = [
@@ -681,8 +682,11 @@ const handleBulkDownload = async () => {
         fetApprovalDetails(meta.approvalId);
         return;
       }
-      if (meta.esignRequestId && meta.signStatus === "pendingSignature") {
-        try {
+      // const SIGNABLE_STATUSES = ["pendingSignature", "partiallySigned"];
+    //  if (meta.esignRequestId && meta.signStatus === "pendingSignature") {
+             const SIGNABLE_STATUSES = ["pendingSignature", "partiallySigned"];
+      if (meta.esignRequestId && SIGNABLE_STATUSES.includes(meta.signStatus)) {
+         try {
           const response = await esignAPI.getSignatureById(
             meta.esignRequestId,
           );
@@ -719,18 +723,24 @@ const handleBulkDownload = async () => {
                   submitter.completed_at !== null,
               ),
             }))
-            .filter((s) => s.email === targetEmail && !s.completed_at);
-
+            // .filter((s) => s.email === targetEmail && !s.completed_at);
+            .filter(
+              (s) =>
+                s.email?.toLowerCase() === targetEmail?.toLowerCase() &&
+                !s.completed_at,
+            );
           console.log("Matching Submitters:", matchingSubmitters);
 
           if (matchingSubmitters.length > 0) {
             const firstSlug = matchingSubmitters[0].slug;
             openSignatureDialog(firstSlug);
           } else {
+            // const userSubmitters = submission.submitters.filter(
+            //   (s) => s.email === targetEmail,
+            // );
             const userSubmitters = submission.submitters.filter(
-              (s) => s.email === targetEmail,
+              (s) => s.email?.toLowerCase() === targetEmail?.toLowerCase(),
             );
-
             if (userSubmitters.length > 0) {
               const completedSubmitter = userSubmitters[0];
 
@@ -899,6 +909,7 @@ const handleBulkDownload = async () => {
     sendForSignature: "Send for Sign",
     pendingSignature: "Waiting for Signature",
     signatureCompleted: "Signature Received",
+    partiallySigned: "Partially Signed",
   };
 
   const formatUploadedAt = (dateValue) => {
@@ -934,23 +945,62 @@ const handleBulkDownload = async () => {
   const getStatusChip = (meta, isFolder) => {
     if (isFolder) return null;
     const chips = [];
-    if (SIGN_STATUSES.includes(meta.signStatus)) {
+    // if (SIGN_STATUSES.includes(meta.signStatus)) {
+    //   let color = "gray";
+    //   if (meta.signStatus === "pendingSignature") color = "orange";
+    //   if (meta.signStatus === "signatureCompleted") color = "green";
+    //   if(meta.signStatus === "partiallySigned") color = "gray";
+    //   chips.push(
+         if (SIGN_STATUSES.includes(meta.signStatus)) {
       let color = "gray";
+      let signText = statusTextMap[meta.signStatus];
       if (meta.signStatus === "pendingSignature") color = "orange";
       if (meta.signStatus === "signatureCompleted") color = "green";
+
+      const signers = Array.isArray(meta.signers) ? meta.signers : [];
+      const pendingSigners = signers.filter((s) => !s.signed);
+
+      if (meta.signStatus === "partiallySigned") {
+        color = "blue";
+        const signedCount =
+          meta.signedCount ?? signers.filter((s) => s.signed).length;
+        const totalSigners = meta.totalSigners ?? signers.length;
+        signText = `Partially Signed (${signedCount}/${totalSigners})`;
+      }
+
       chips.push(
-        <span
-          key="signChip"
-          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
-            color === "orange"
-              ? "border-orange-500 text-orange-700 bg-orange-50"
-              : color === "green"
-                ? "border-green-500 text-green-700 bg-green-50"
-                : "border-gray-500 text-gray-700 bg-gray-50"
-          }`}
-        >
-          {statusTextMap[meta.signStatus]}
-        </span>,
+        <div key="signChip" className="flex flex-col gap-1">
+          <span
+            className={`inline-flex w-fit items-center px-2 py-0.5 rounded text-xs font-medium border ${
+              color === "orange"
+                ? "border-orange-500 text-orange-700 bg-orange-50"
+                : color === "green"
+                  ? "border-green-500 text-green-700 bg-green-50"
+                  : color === "blue"
+                    ? "border-blue-500 text-blue-700 bg-blue-50"
+                    : "border-gray-500 text-gray-700 bg-gray-50"
+            }`}
+          >
+            {signText}
+          </span>
+
+          {meta.signStatus === "partiallySigned" && signers.length > 0 && (
+            <div className="flex flex-col gap-0.5">
+              {signers.map((s, idx) => (
+                <span
+                  key={s.email || idx}
+                  className={`text-[11px] ${
+                    s.signed ? "text-green-700" : "text-orange-700 font-semibold"
+                  }`}
+                  title={s.email}
+                >
+                  {s.signed ? "✓" : "⏳"} {s.name?.trim() || s.email}
+                  {s.signed ? " – Signed" : " – Not signed yet"}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>,
       );
     }
     if (APPROVAL_STATUSES.includes(meta.authStatus)) {
@@ -1013,7 +1063,8 @@ const handleBulkDownload = async () => {
       );
     }
     if (chips.length === 0) return null;
-    return <div className="flex gap-1">{chips}</div>;
+    // return <div className="flex gap-1">{chips}</div>;
+        return <div className="flex flex-wrap items-start gap-1">{chips}</div>;
   };
 
   const findNewSystemTag = (item) => {

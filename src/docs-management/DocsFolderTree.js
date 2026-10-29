@@ -69,6 +69,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../components/ui/tooltip";
+
 const DocsFolderTree = () => {
   const [accountId, setAccountId] = useState(
     sessionStorage.getItem("accountId"),
@@ -284,9 +285,16 @@ const DocsFolderTree = () => {
       updateStatus(item, "readStatus", newValue);
     };
 
-    const SIGN_STATUSES = [
+    // const SIGN_STATUSES = [
+    //   "sendForSignature",
+    //   "pendingSignature",
+    //   "signatureCompleted",
+    // ];
+
+        const SIGN_STATUSES = [
       "sendForSignature",
       "pendingSignature",
+      "partiallySigned",
       "signatureCompleted",
     ];
     const APPROVAL_STATUSES = [
@@ -417,36 +425,7 @@ const DocsFolderTree = () => {
       }
     };
 
-    // const handleBulkDownload = async () => {
-    //   if (selectedItems.size === 0) {
-    //     toast.warning("Please select items to download");
-    //     return;
-    //   }
-    //   setBulkOperationLoading(true);
-    //   try {
-    //     const paths = Array.from(selectedItems);
-    //     const res = await accountDocsAPI.downloadItems({
-    //       paths,
-    //       accountId,
-    //       accountName,
-    //     });
-    //     const blob = res.data;
-    //     const url = window.URL.createObjectURL(blob);
-    //     const a = document.createElement("a");
-    //     a.href = url;
-    //     a.download = `selected_items_${Date.now()}.zip`;
-    //     document.body.appendChild(a);
-    //     a.click();
-    //     a.remove();
-    //     window.URL.revokeObjectURL(url);
-    //     toast.success("Download started");
-    //   } catch (err) {
-    //     console.error("Bulk download error:", err);
-    //     toast.error("Failed to download items");
-    //   } finally {
-    //     setBulkOperationLoading(false);
-    //   }
-    // };
+  
 
 
     const handleBulkDownload = async () => {
@@ -739,84 +718,149 @@ const DocsFolderTree = () => {
           fetApprovalDetails(meta.approvalId);
           return;
         }
-        if (meta.esignRequestId && meta.signStatus === "pendingSignature") {
+        // if (meta.esignRequestId && meta.signStatus === "pendingSignature") {
+        //   try {
+        //     const response = await esignAPI.getSignatureById(
+        //       meta.esignRequestId,
+        //     );
+
+        //     const result = response.data;
+        //     // console.log("Signature details:", result);
+
+        //     const submission = result;
+
+        //     if (
+        //       !submission.submitters ||
+        //       !Array.isArray(submission.submitters)
+        //     ) {
+        //       console.error("No submitters array found in response");
+        //       alert("Error loading signature request: Invalid data structure");
+        //       return;
+        //     }
+
+        //     const matchingSubmitters = submission.submitters
+        //       .map((s) => ({
+        //         slug: s.slug,
+        //         email: s.email,
+        //         submissionId: s.submission_id,
+        //         templateName: s.name,
+        //         createdAt: submission.createdAt,
+        //         fileUrl: submission.fileUrl,
+        //         externalId: submission.externalId,
+        //         submissionData: submission,
+        //         status: s.status,
+        //         completed_at: s.completed_at,
+        //         role: s.role,
+        //         allCompleted: submission.submitters.every(
+        //           (submitter) =>
+        //             submitter.status === "completed" ||
+        //             submitter.completed_at !== null,
+        //         ),
+        //       }))
+        //       .filter((s) => s.email === targetEmail && !s.completed_at);
+
+        //     console.log("Matching Submitters:", matchingSubmitters);
+
+        //     if (matchingSubmitters.length > 0) {
+        //       const firstSlug = matchingSubmitters[0].slug;
+        //       // console.log("Opening signature dialog with slug:", firstSlug);
+        //       openSignatureDialog(firstSlug);
+        //     } else {
+        //       const userSubmitters = submission.submitters.filter(
+        //         (s) => s.email === targetEmail,
+        //       );
+
+        //       if (userSubmitters.length > 0) {
+        //         const completedSubmitter = userSubmitters[0];
+
+        //         if (completedSubmitter.completed_at) {
+        //           alert("You have already signed this document.");
+
+        //           setTimeout(() => {
+        //             openDocument(fullPath, fileName);
+        //           }, 500);
+        //         } else {
+        //           alert(
+        //             "You are not authorized to sign this document at this time.",
+        //           );
+        //         }
+        //       } else {
+        //         alert("You are not listed as a signer for this document.");
+        //       }
+        //     }
+        //   } catch (error) {
+        //     console.error("Error fetching signature details:", error);
+        //     alert("Error loading signature request.");
+        //   }
+
+        //   return;
+        // }
+        const SIGNABLE_STATUSES = ["pendingSignature", "partiallySigned"];
+        if (meta.esignRequestId && SIGNABLE_STATUSES.includes(meta.signStatus)) {
+          const currentEmail = (targetEmail || "").trim().toLowerCase();
+          const pendingNames = (meta.signers || [])
+            .filter((s) => !s.signed)
+            .map((s) => (s.name || s.email || "").replace(/\s+/g, " ").trim());
+
+          if (!currentEmail) {
+            alert("Your session email is missing. Please log in again.");
+            return;
+          }
+
           try {
             const response = await esignAPI.getSignatureById(
               meta.esignRequestId,
             );
+            const submission = response.data;
+            console.log("Esign submission:", submission);
 
-            const result = response.data;
-            // console.log("Signature details:", result);
-
-            const submission = result;
-
-            if (
-              !submission.submitters ||
-              !Array.isArray(submission.submitters)
-            ) {
-              console.error("No submitters array found in response");
+            if (!Array.isArray(submission?.submitters)) {
               alert("Error loading signature request: Invalid data structure");
               return;
             }
 
-            const matchingSubmitters = submission.submitters
-              .map((s) => ({
-                slug: s.slug,
-                email: s.email,
-                submissionId: s.submission_id,
-                templateName: s.name,
-                createdAt: submission.createdAt,
-                fileUrl: submission.fileUrl,
-                externalId: submission.externalId,
-                submissionData: submission,
-                status: s.status,
-                completed_at: s.completed_at,
-                role: s.role,
-                allCompleted: submission.submitters.every(
-                  (submitter) =>
-                    submitter.status === "completed" ||
-                    submitter.completed_at !== null,
-                ),
-              }))
-              .filter((s) => s.email === targetEmail && !s.completed_at);
+            const mySubmitter = submission.submitters.find(
+              (s) => (s.email || "").trim().toLowerCase() === currentEmail,
+            );
 
-            console.log("Matching Submitters:", matchingSubmitters);
-
-            if (matchingSubmitters.length > 0) {
-              const firstSlug = matchingSubmitters[0].slug;
-              // console.log("Opening signature dialog with slug:", firstSlug);
-              openSignatureDialog(firstSlug);
-            } else {
-              const userSubmitters = submission.submitters.filter(
-                (s) => s.email === targetEmail,
+            // Not a signer on this document
+            if (!mySubmitter) {
+              alert(
+                pendingNames.length
+                  ? `You are not a signer on this document.\nWaiting for: ${pendingNames.join(", ")}`
+                  : "You are not listed as a signer for this document.",
               );
-
-              if (userSubmitters.length > 0) {
-                const completedSubmitter = userSubmitters[0];
-
-                if (completedSubmitter.completed_at) {
-                  alert("You have already signed this document.");
-
-                  setTimeout(() => {
-                    openDocument(fullPath, fileName);
-                  }, 500);
-                } else {
-                  alert(
-                    "You are not authorized to sign this document at this time.",
-                  );
-                }
-              } else {
-                alert("You are not listed as a signer for this document.");
-              }
+              return;
             }
+
+            // Logged-in signer has NOT signed yet -> open their form
+            if (!mySubmitter.completed_at && mySubmitter.status !== "completed") {
+              if (!mySubmitter.slug) {
+                alert("Signing link not found for your signer record.");
+                return;
+              }
+              openSignatureDialog(mySubmitter.slug);
+              return;
+            }
+
+            // Logged-in signer already signed -> show who is pending, open doc
+            const othersPending = pendingNames.filter(
+              (n) =>
+                n.toLowerCase() !==
+                (mySubmitter.name || "").replace(/\s+/g, " ").trim().toLowerCase(),
+            );
+            alert(
+              othersPending.length
+                ? `You have already signed this document.\nWaiting for: ${othersPending.join(", ")}`
+                : "You have already signed this document.",
+            );
+            setTimeout(() => openDocument(fullPath, fileName), 300);
           } catch (error) {
             console.error("Error fetching signature details:", error);
             alert("Error loading signature request.");
           }
-
           return;
         }
-
         // A sealed document is still readable. The seal exists to stop the
         // client changing or removing it - renaming, moving, deleting and
         // uploading into it all remain blocked below and in the row menu.
@@ -996,12 +1040,17 @@ const DocsFolderTree = () => {
       canceledApproval: "canceledApproval",
       approvalCompleted: "Approval Completed",
     };
-    const statusTextMap = {
+    // const statusTextMap = {
+    //   sendForSignature: "Send for Sign",
+    //   pendingSignature: "Waiting for Signature",
+    //   signatureCompleted: "Signature Received",
+    // };
+       const statusTextMap = {
       sendForSignature: "Send for Sign",
       pendingSignature: "Waiting for Signature",
+      partiallySigned: "Partially Signed",
       signatureCompleted: "Signature Received",
     };
-
     const formatUploadedAt = (dateValue) => {
       if (!dateValue) return "";
       if (
@@ -1035,23 +1084,78 @@ const DocsFolderTree = () => {
     const getStatusChip = (meta, isFolder) => {
       if (isFolder) return null;
       const chips = [];
-      if (SIGN_STATUSES.includes(meta.signStatus)) {
+      // if (SIGN_STATUSES.includes(meta.signStatus)) {
+      //   let color = "gray";
+      //   if (meta.signStatus === "pendingSignature") color = "orange";
+      //   if (meta.signStatus === "signatureCompleted") color = "green";
+      //   chips.push(
+      //     <span
+      //       key="signChip"
+      //       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+      //         color === "orange"
+      //           ? "border-orange-500 text-orange-700 bg-orange-50"
+      //           : color === "green"
+      //             ? "border-green-500 text-green-700 bg-green-50"
+      //             : "border-gray-500 text-gray-700 bg-gray-50"
+      //       }`}
+      //     >
+      //       {statusTextMap[meta.signStatus]}
+      //     </span>,
+      //   );
+      // }
+            if (SIGN_STATUSES.includes(meta.signStatus)) {
         let color = "gray";
+        let signText = statusTextMap[meta.signStatus];
         if (meta.signStatus === "pendingSignature") color = "orange";
         if (meta.signStatus === "signatureCompleted") color = "green";
+
+        const signers = Array.isArray(meta.signers) ? meta.signers : [];
+
+        if (meta.signStatus === "partiallySigned") {
+          color = "blue";
+          const signedCount =
+            meta.signedCount ?? signers.filter((s) => s.signed).length;
+          const totalSigners = meta.totalSigners ?? signers.length;
+          signText = `Partially Signed (${signedCount}/${totalSigners})`;
+        }
+
         chips.push(
-          <span
+          <div
             key="signChip"
-            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
-              color === "orange"
-                ? "border-orange-500 text-orange-700 bg-orange-50"
-                : color === "green"
-                  ? "border-green-500 text-green-700 bg-green-50"
-                  : "border-gray-500 text-gray-700 bg-gray-50"
-            }`}
+            style={{ display: "flex", flexDirection: "column", gap: 4 }}
           >
-            {statusTextMap[meta.signStatus]}
-          </span>,
+            <span
+              className={`inline-flex w-fit items-center px-2 py-0.5 rounded text-xs font-medium border whitespace-nowrap ${
+                color === "orange"
+                  ? "border-orange-500 text-orange-700 bg-orange-50"
+                  : color === "green"
+                    ? "border-green-500 text-green-700 bg-green-50"
+                    : color === "blue"
+                      ? "border-blue-500 text-blue-700 bg-blue-50"
+                      : "border-gray-500 text-gray-700 bg-gray-50"
+              }`}
+            >
+              {signText}
+            </span>
+
+            {meta.signStatus === "partiallySigned" &&
+              signers.map((s, idx) => (
+                <span
+                  key={s.email || idx}
+                  title={s.email}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: s.signed ? 400 : 600,
+                    color: s.signed ? "#15803d" : "#c2410c",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.signed ? "✓" : "⏳"}{" "}
+                  {(s.name || s.email || "").replace(/\s+/g, " ").trim()}
+                  {s.signed ? " – Signed" : " – Not signed yet"}
+                </span>
+              ))}
+          </div>,
         );
       }
       if (APPROVAL_STATUSES.includes(meta.authStatus)) {
@@ -1114,7 +1218,8 @@ const DocsFolderTree = () => {
         );
       }
       if (chips.length === 0) return null;
-      return <div className="flex gap-1">{chips}</div>;
+      // return <div className="flex gap-1">{chips}</div>;
+            return <div className="flex flex-wrap items-start gap-1">{chips}</div>;
     };
 
     const findNewSystemTag = (item) => {
