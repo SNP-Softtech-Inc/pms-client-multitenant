@@ -110,6 +110,7 @@ import ProfilePictureUpload from './ProfilePictureUpload';
 import { Loader2, User, Building2, Pencil, Save, X } from 'lucide-react';
 import { accountsAPI, contactsAPI } from '../services/api';
 import { useToast } from '../hooks/useToast';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const UserProfile = () => {
   const [selectedAccount] = useState(sessionStorage.getItem("accountId"));
@@ -139,9 +140,11 @@ const UserProfile = () => {
     }
   })();
 
-  const fetchAccountInfo = async (accountIdToFetch) => {
+  // silent (auto refresh): the full-page spinner would unmount the photo
+  // upload, losing a picked image; and a failure keeps the page as it is.
+  const fetchAccountInfo = async (accountIdToFetch, { silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       const res = await accountsAPI.getAccountById(accountIdToFetch);
 
@@ -149,9 +152,9 @@ const UserProfile = () => {
       setError(null);
     } catch (err) {
       console.error("Error fetching account information:", err);
-      setError("Failed to fetch account information");
+      if (!silent) setError("Failed to fetch account information");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -181,6 +184,16 @@ const UserProfile = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccount]);
+
+  // Paused while the profile is being edited or saved.
+  useAutoRefresh(
+    () =>
+      Promise.all([
+        selectedAccount && fetchAccountInfo(selectedAccount, { silent: true }),
+        storedUser?.id && fetchContact(storedUser.id),
+      ]),
+    { enabled: !isEditing && !isSaving },
+  );
 
   const handleUploadSuccess = (newImageUrl) => {
     setAccountInfo((prev) => ({

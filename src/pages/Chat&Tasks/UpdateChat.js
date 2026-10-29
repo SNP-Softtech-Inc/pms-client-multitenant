@@ -5,6 +5,7 @@ import Editor from "../../TextEditor/TextEditor";
 import { accountsAPI, chatAPI } from "../../services/api";
 import { Send, MoreVertical, X, Square, CheckSquare, Loader2, Backpack } from "lucide-react";
 import { useToast } from "../../hooks/useToast";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { Check, CheckCheck ,MoveLeft} from "lucide-react";
 import TextEditor from "../../TextEditor/TextEditor";
 
@@ -87,25 +88,14 @@ const UpdateChat = ({ chatId: chatIdProp, embedded = false }) => {
 
   useEffect(() => {
     getsChatDetails();
-
-    // 15s lands a read receipt while the client is still looking at the
-    // thread, without hammering the chat service. Skipped while the tab is
-    // in the background, and caught up as soon as it comes forward again.
-    const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") {
-        getsChatDetails({ silent: true });
-      }
-    };
-
-    const poll = setInterval(refreshIfVisible, 15000);
-    document.addEventListener("visibilitychange", refreshIfVisible);
-
-    return () => {
-      clearInterval(poll);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_id]);
+
+  // 15s lands a read receipt while the client is still looking at the
+  // thread, without hammering the chat service. The shared hook skips a
+  // hidden tab, catches up on return or focus, and never overlaps two
+  // requests - which the hand-rolled poll this replaces could.
+  useAutoRefresh(() => getsChatDetails({ silent: true }), { intervalMs: 15000, enabled: Boolean(_id) });
 
   // Check if message is within 10 minutes
   // How long after sending a message it can still be edited. WhatsApp-style:

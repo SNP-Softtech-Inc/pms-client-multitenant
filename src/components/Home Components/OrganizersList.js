@@ -6,6 +6,7 @@ import OrganizerDialog from "../../pages/Organizers/OrganizerDialog";
 import { ClipboardList, ArrowRight } from "lucide-react";
 
 import { organizerAPI } from "../../services/api"; // ✅ import API
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 const OrganizersList = ({ accountId }) => {
   const [organizers, setOrganizers] = useState([]);
@@ -28,6 +29,9 @@ const OrganizersList = ({ accountId }) => {
       fetchOrganizers();
     }
   }, [accountId]);
+
+  // Paused while an organizer is open: the client may be filling it in.
+  useAutoRefresh(fetchOrganizers, { enabled: Boolean(accountId) && !openDialog });
 
   const handleOpenDialog = (organizer) => {
     setSelectedOrganizer(organizer);

@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 // import { useTheme } from "@mui/material/styles";
 import { chatAPI } from "../../services/api"; // ✅ use your API
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { MessageSquare, ArrowRight } from "lucide-react";
 
 const ChatsList = ({ accountId }) => {
@@ -13,20 +14,23 @@ const ChatsList = ({ accountId }) => {
   // const theme = useTheme();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchUnreadChats = async () => {
-      try {
-        const response = await chatAPI.getUnreadMessages(accountId, "Admin");
-        setChats(response.data.chats || []);
-      } catch (error) {
-        console.error("Error fetching unread chats:", error);
-      }
-    };
+  // Outside the effect so auto refresh can call it too.
+  const fetchUnreadChats = async () => {
+    try {
+      const response = await chatAPI.getUnreadMessages(accountId, "Admin");
+      setChats(response.data.chats || []);
+    } catch (error) {
+      console.error("Error fetching unread chats:", error);
+    }
+  };
 
+  useEffect(() => {
     if (accountId) {
       fetchUnreadChats();
     }
   }, [accountId]);
+
+  useAutoRefresh(fetchUnreadChats, { enabled: Boolean(accountId) });
 
   const stripHtmlAndLimit = (html, wordLimit) => {
     if (!html) return "";

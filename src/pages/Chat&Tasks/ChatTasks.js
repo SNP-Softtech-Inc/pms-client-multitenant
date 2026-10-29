@@ -249,6 +249,7 @@ import UpdateChat from "./UpdateChat";
 
 // ✅ API imports
 import { chatAPI, accountsAPI } from "../../services/api";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 const ChatsTasks = () => {
   const [accountId] = useState(sessionStorage.getItem("accountId"));
@@ -270,9 +271,11 @@ const ChatsTasks = () => {
   }, [accountId]);
 
   // ================= CHAT LIST =================
-  const fetchChats = useCallback(async () => {
+  // silent (auto refresh): the list stays on screen - "Loading chats..."
+  // would replace it and lose the scroll position.
+  const fetchChats = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       // const res = await chatAPI.getChatsByAccountAndStatus(accountId, true);
        const res = await chatAPI.getChatsByAccountAndStatus(
         accountId,
@@ -292,6 +295,9 @@ const ChatsTasks = () => {
       fetchChats();
     }
   }, [accountId, fetchAccountDetails, fetchChats]);
+
+  // The open chat refreshes itself (UpdateChat); this keeps the list current.
+  useAutoRefresh(() => fetchChats({ silent: true }), { enabled: Boolean(accountId) });
 
   // ================= UNREAD COUNT =================
   const countUnreadAdminMessages = (chat) =>

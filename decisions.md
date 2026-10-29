@@ -8,6 +8,64 @@ this way?" — not for routine edits. Update it in the same commit as the code.
 
 ---
 
+## 2026-10-29 · v1.16.0 · staging only
+
+### Auto refresh on every data screen, through one shared hook
+
+Same mechanism as the admin app (v1.63.0 there); the files are copies, as
+the two apps share no code.
+
+**One shared mechanism.** `src/lib/autoRefresh.js` (`startAutoRefresh`,
+`keepIfSame`) and `src/hooks/useAutoRefresh.js`. Every 30 seconds while the
+tab is visible, and at once on return to the tab or window; nothing while
+hidden; never two requests at once; a failed refresh is logged and the next
+one still runs; nothing below 5 seconds is accepted. Before this, each screen
+that refreshed had its own copy of a setInterval block, with no overlap guard
+- and most screens had none, which is why it "worked on some screens".
+
+**Quiet, or not at all.** A screen's normal load usually shows a spinner,
+toasts on failure, or clears the list on error. Called every 30 seconds that
+would blink the page, stack error toasts, or - where the spinner replaces the
+page - unmount an open dialog. So each screen refreshes through a silent path:
+no spinner, no toast, a failure keeps what is shown.
+
+**`keepIfSame`.** A quiet refresh hands back the current object when the
+server's answer is identical, so React does not re-render. Without it the
+shared table jumps back to page 1 every 30 seconds, and chat views scroll to
+the bottom.
+
+**Paused while the user is working.** Each screen passes `enabled: false`
+while a form, drawer, dialog, signature, upload or save is open or running.
+
+**Where it lives matters here:**
+- Home does not refresh as a whole - its loader swaps every list for a
+  skeleton, unmounting an open organizer, proposal signature or DocuSeal
+  iframe. Each Home list refreshes itself instead.
+- The documents and trash screens declare their real UI as a component
+  inside another. Any outer state change (setError, a toast) remounts it and
+  wipes what the client has open, so the refresh lives in the inner component
+  and only ever sets the tree.
+- The DocuSeal signer's load replaced the whole panel with a spinner,
+  signing dialog included; its quiet path never sets loading and pauses while
+  any signing, viewing, payment or cancel dialog is open.
+
+**Not refreshed, on purpose:** PayInvoice (the credit and amount due would
+change while the client is paying); Payment's invoice summary (its loader is
+meant to PATCH overdue statuses); the auth screens.
+
+**Chat:** UpdateChat's own 15s poll moved onto the hook, which adds the
+overlap guard and refresh-on-focus it lacked.
+
+**Also:** QuickLinks and Invoice now store `[]` when the server sends no list,
+so a refresh cannot crash their `.reduce` / `.filter`.
+
+**Pre-existing, found on the way, not changed:** DocsFolderTree calls an
+undefined `setFolderUploadDrawerOpen` (the "upload folder" action);
+Payment.js calls an undefined `isInvoiceOverdue`; PayInvoice.js holds a
+hardcoded AffiniPay key - for the security review.
+
+---
+
 ## 2026-10-24 · Test harness (staging only)
 
 ### A static guard against module-scope hooks

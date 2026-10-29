@@ -308,6 +308,7 @@ import autoTable from "jspdf-autotable";
 import "jspdf-autotable";
 import { invoiceAPI } from "../../services/api";
 import { useToast } from "../../hooks/useToast";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import logo from "../../Images/snp.png";
 import { buildInvoicePDF, buildInvoicePrintHTML } from "./invoiceDocuments";
 
@@ -355,7 +356,9 @@ const Invoices = () => {
       const response = await invoiceAPI.getInvoiceListByAccountId(accountId);
       const data = response.data;
       console.log("invoices", data);
-      setBillingInvoice(data.invoice);
+      // [] when the answer has no list: the table filters it, and an auto
+      // refresh must not be what crashes the page.
+      setBillingInvoice(data.invoice || []);
     } catch (error) {
       console.error("Error fetching task templates:", error);
     }
@@ -364,6 +367,9 @@ const Invoices = () => {
   useEffect(() => {
     fetchidwiseData(accountId);
   }, [accountId]);
+
+  // No spinner and selections are kept by id, so it refreshes as it is.
+  useAutoRefresh(() => fetchidwiseData(accountId), { enabled: Boolean(accountId) });
 
   const handlePayInvoice = () => {
     navigate("/payinvoice", {

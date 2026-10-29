@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { Briefcase } from "lucide-react";
 import { jobAPI } from "../../services/api";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 const ClientFacingJobs = ({ accountId }) => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchJobs = async () => {
+  // silent: an auto refresh keeps the cards on screen instead of the skeleton.
+  const fetchJobs = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       const res = await jobAPI.getJobsByAccount(accountId, true);
 
@@ -29,6 +31,8 @@ const ClientFacingJobs = ({ accountId }) => {
   useEffect(() => {
     if (accountId) fetchJobs();
   }, [accountId]);
+
+  useAutoRefresh(() => fetchJobs({ silent: true }), { enabled: Boolean(accountId) });
 
   if (!loading && jobs.length === 0) return null;
 

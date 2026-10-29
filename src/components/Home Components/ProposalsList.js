@@ -14,6 +14,7 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import axios from "axios";
 import ProposalPreviewDialog from "../../pages/Proposals/ProposalPreviewDialog"; 
 import { proposalAPI } from "../../services/api"; // adjust path
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 const ProposalsList = ({accountId}) => {
   const PROPOSAL_API = process.env.REACT_APP_PROPOSAL_URL
   const [proposals, setProposals] = useState([]);
@@ -39,6 +40,9 @@ useEffect(() => {
     fetchProposalsAllData();
   }
 }, [accountId]);
+
+// Paused while a proposal is open: the client may be signing it.
+useAutoRefresh(fetchProposalsAllData, { enabled: Boolean(accountId) && !openDialog });
   const handleOpenDialog = (proposal) => {
     setSelectedProposal(proposal);
     setOpenDialog(true);

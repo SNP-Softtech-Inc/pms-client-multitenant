@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { organizerAPI } from "../../services/api";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 import OrganizerDialog from "./OrganizerDialog";
 import { ClipboardList } from "lucide-react";
@@ -12,9 +13,11 @@ const Organizers = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedOrganizer, setSelectedOrganizer] = useState(null);
-  const fetchAccountOrganizer = async () => {
+  // silent (auto refresh): no skeleton, so the rows do not blink and
+  // re-animate every 30 seconds.
+  const fetchAccountOrganizer = async ({ silent = false } = {}) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const res = await organizerAPI.getActiveOrganizerByAccountId(
         accountId,
         true,
@@ -33,6 +36,10 @@ const Organizers = () => {
   useEffect(() => {
     fetchAccountOrganizer();
   }, [isActiveTrue]);
+
+  // Paused while an organizer is open. Its form re-fills from the organizer
+  // object, so the list must not change under it while the client types.
+  useAutoRefresh(() => fetchAccountOrganizer({ silent: true }), { enabled: Boolean(accountId) && !openDialog });
 
   const handleOpenDialog = (organizer) => {
     setSelectedOrganizer(organizer);

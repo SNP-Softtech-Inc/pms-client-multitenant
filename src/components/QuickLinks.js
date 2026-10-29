@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import Editor from "../components/Texteditor";
 import { chatAPI } from "../services/api";
 import { useToast } from "../hooks/useToast";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 const ease = [0.16, 1, 0.3, 1];
 
@@ -159,7 +160,9 @@ const fetchInvoices = async () => {
     //   })
     // );
 
-    setAccountInvoicesData(res.data?.invoice);
+    // [] when the answer has no list: the summary below reduces over it, and
+    // an auto refresh must not be what crashes the page.
+    setAccountInvoicesData(res.data?.invoice || []);
   } catch (err) {
     console.error("Failed to fetch invoices:", err);
   } finally {
@@ -172,6 +175,9 @@ useEffect(() => {
     fetchInvoices();
   }
 }, [accountId]);
+
+// Neither load shows a spinner, so both can refresh as they are.
+useAutoRefresh(() => Promise.all([fetchAccount(), fetchInvoices()]), { enabled: Boolean(accountId) });
   
 const invoiceSummary = accountInvoicesData.reduce(
   (acc, invoice) => {

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from "react";
 // import PaymentIcon from "@mui/icons-material/Payment";
 import { useNavigate } from "react-router-dom";
 import { invoiceAPI } from "../../services/api"; // ✅ adjust path if needed
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { CreditCard, ArrowRight } from "lucide-react";
 const BillingList = ({ accountId }) => {
   // const theme = useTheme();
@@ -30,6 +31,8 @@ console.log("responce",response.data)
       fetchInvoices();
     }
   }, [accountId]);
+
+  useAutoRefresh(fetchInvoices, { enabled: Boolean(accountId) });
 
   const handlePayInvoice = (invoice) => {
     navigate("/payinvoice", {

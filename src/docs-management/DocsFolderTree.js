@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { EllipsisVertical, Info, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import FileUploadDrawer from "./drawers/FileUploadDrawer";
 import CreteFolderDrawer from "./drawers/CreteFolderDrawer";
 import FolderUploadDrawer from "./drawers/FolderUploadDrawer";
@@ -1991,6 +1992,33 @@ const DocsFolderTree = () => {
         );
       });
     };
+
+    // Auto refresh. Lives here, in the inner component, and only ever sets
+    // the tree: any outer state change (setError, a toast) remounts this
+    // component and wipes what the client has open. A failed refresh keeps
+    // the tree as it is. Paused while anything is open or in progress.
+    const refreshTreeQuietly = async () => {
+      const res = await accountDocsAPI.clientListFoldersAndFiles(accountId);
+      if (res.data?.contents) setFolderTree(res.data.contents);
+    };
+
+    useAutoRefresh(refreshTreeQuietly, {
+      enabled:
+        Boolean(accountId) &&
+        !dialogOpen &&
+        !cancelDialogOpen &&
+        !invoiceDialogOpen &&
+        !payingInline &&
+        !openViewer &&
+        !menuAnchorEl &&
+        !newFolderDrawerOpen &&
+        !folderUploaDrawerOpen &&
+        !renameDrawer &&
+        !fileUploadDrawerOpen &&
+        !moveDrawerOpen &&
+        !bulkMoveDrawerOpen &&
+        !bulkOperationLoading,
+    });
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">

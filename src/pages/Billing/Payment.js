@@ -20,6 +20,7 @@ import dayjs from "dayjs";
 import { MoreVertical, Receipt, CreditCard } from "lucide-react";
 
 import { invoiceAPI, accountsAPI } from '../../services/api'
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 const Payment = () => {
       const [accountId] = useState(sessionStorage.getItem("accountId"));
     const [account, setAccount] = useState(null);
@@ -29,11 +30,12 @@ const [accountLoading, setAccountLoading] = useState(false);
  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchPayments = async () => {
+  // silent (auto refresh): "Loading..." replaces the whole tab.
+  const fetchPayments = async ({ silent = false } = {}) => {
     if (!accountId) return;
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       const res =
         await invoiceAPI.getOfflinePaymentsByAccountId(accountId);
@@ -111,6 +113,12 @@ useEffect(() => {
   fetchInvoices();
   fetchAccount();
 }, [accountId]);
+
+// Payments and the credit balance only. fetchInvoices is left out on purpose:
+// it is written to PATCH overdue invoices, so it must not run on a timer.
+useAutoRefresh(() => Promise.all([fetchPayments({ silent: true }), fetchAccount()]), {
+  enabled: Boolean(accountId),
+});
     const invoiceSummary = accountInvoicesData.reduce(
     (acc, invoice) => {
       const total = Number(invoice.summary?.total || 0);

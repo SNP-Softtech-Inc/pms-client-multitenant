@@ -172,6 +172,7 @@ import axios from "axios";
 import ProposalPreviewDialog from "./ProposalPreviewDialog";
 // import { toast } from "material-react-toastify";
 import { proposalAPI } from "../../services/api";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { PageTransition, TableSkeletonRows } from "../../components/ui/motion";
@@ -192,18 +193,25 @@ const toast=useToast()
     }
   }, [accountId]);
 
-  const fetchPrprosalsAllData = async (accId) => {
+  // silent (auto refresh): no skeleton, and no error toast every 30
+  // seconds while the server is down - the list already shown stays.
+  const fetchPrprosalsAllData = async (accId, { silent = false } = {}) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const res = await proposalAPI.getAccountProposalsByAccountIds([accId]);
       setProposalsList(res.data.proposallist || []);
     } catch (error) {
       console.error("Error fetching proposals:", error);
-      toast.error("Failed to fetch proposals");
+      if (!silent) toast.error("Failed to fetch proposals");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
+
+  // Paused while a proposal is open: the client may be signing it.
+  useAutoRefresh(() => fetchPrprosalsAllData(accountId, { silent: true }), {
+    enabled: Boolean(accountId) && !openDialog,
+  });
 
   const handleOpenDialog = (proposal) => {
     setSelectedProposal(proposal);

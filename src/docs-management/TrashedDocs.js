@@ -569,6 +569,7 @@ import {
 import { AiFillFileUnknown } from "react-icons/ai";
 import { accountDocsAPI,accountsAPI } from "../services/api";
 import { useToast } from "../hooks/useToast";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 const TrashedDocs = () => {
   const [accountId, setAccountId] = useState(
@@ -992,6 +993,18 @@ const TrashedDocs = () => {
         );
       });
     };
+
+    // Auto refresh, in the inner component for the same reason as
+    // DocsFolderTree: outer state changes remount it. Only the list is set;
+    // a failure keeps it. Paused while a delete is being confirmed or run.
+    const refreshTrashQuietly = async () => {
+      const res = await accountDocsAPI.listTrashedItems(accountId);
+      if (res.status === 200) setFolderTree(res.data?.contents?.Client || []);
+    };
+
+    useAutoRefresh(refreshTrashQuietly, {
+      enabled: Boolean(accountId) && !deleteDialogOpen && !bulkDeleting && !menuAnchorEl,
+    });
 
     return (
       <div className="max-w-7xl mx-auto p-6">

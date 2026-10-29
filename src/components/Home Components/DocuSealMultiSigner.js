@@ -264,6 +264,7 @@ import { DocusealForm } from "@docuseal/react";
 import { esignAPI, accountDocsAPI, accountsAPI, invoiceAPI } from "../../services/api";
 import { X, Info, Maximize2, Minimize2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 
 const DocuSealMultiSigner = ({ accountId }) => {
   const [submissions, setSubmissions] = useState([]);
@@ -681,11 +682,17 @@ const DocuSealMultiSigner = ({ accountId }) => {
     return { pendingSignatures, pendingApprovals };
   };
 
-  // Fetch folder tree and extract pending documents
-  const fetchFolderTree = async () => {
+  // Fetch folder tree and extract pending documents.
+  //
+  // silent (auto refresh): no spinner - the spinner replaces everything,
+  // including an open signing dialog - and a failure keeps what is shown
+  // rather than clearing it.
+  const fetchFolderTree = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
       
       const res = await accountDocsAPI.clientListFoldersAndFiles(accountId);
       
@@ -725,21 +732,23 @@ const DocuSealMultiSigner = ({ accountId }) => {
           );
           
           setSubmissions(submissionsWithDetails);
-        } else {
+        } else if (!silent) {
           setError("Invalid response structure");
           setSubmissions([]);
           setPendingApprovals([]);
         }
-      } else {
+      } else if (!silent) {
         setError("Failed to fetch folder tree");
         setSubmissions([]);
         setPendingApprovals([]);
       }
     } catch (err) {
       console.error("Error fetching documents:", err);
-      setError("Error fetching documents: " + (err.message || "Unknown error"));
-      setSubmissions([]);
-      setPendingApprovals([]);
+      if (!silent) {
+        setError("Error fetching documents: " + (err.message || "Unknown error"));
+        setSubmissions([]);
+        setPendingApprovals([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -752,6 +761,17 @@ const DocuSealMultiSigner = ({ accountId }) => {
       fetchAccountDetails();
     }
   }, [accountId]);
+
+  // Paused while the client is signing, viewing, paying or cancelling.
+  useAutoRefresh(() => fetchFolderTree({ silent: true }), {
+    enabled:
+      Boolean(accountId) &&
+      !dialogOpen &&
+      !cancelDialogOpen &&
+      !invoiceDialogOpen &&
+      !openViewer &&
+      !approvalLoading,
+  });
 
   // Dialog handlers
   const openSignatureDialog = (slug) => {
