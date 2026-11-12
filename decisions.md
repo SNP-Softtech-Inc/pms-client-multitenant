@@ -8,6 +8,32 @@ this way?" — not for routine edits. Update it in the same commit as the code.
 
 ---
 
+## 2026-11-12 · v1.17.0 · staging only
+
+### The documents tree refreshes every 5 seconds
+
+Asked for: when a document is uploaded, the other side should see it very
+quickly. The tree refreshed every 30 seconds (v1.16.0), so a document the
+firm uploaded could take half a minute to appear here. Same change as the
+admin app's v1.71.0; the reasoning, server cost and rejected options are
+recorded there.
+
+- **`QUICK_INTERVAL_MS` = 5 seconds** in `lib/autoRefresh.js` (kept
+  identical to the admin app's copy). Used only by the documents tree
+  (`DocsFolderTree.js`, inner component).
+- **The tree is now set through `keepIfSame`**, as the admin app's is. At
+  30 seconds a fresh array on every tick was harmless; every 5 seconds it
+  would re-render the whole tree each time, even with nothing new.
+- **Everything else is unchanged:** visible tab only, at once on return,
+  never overlapping, and paused while anything is open or in progress
+  (signing, paying, viewing, uploading, moving).
+
+Tests: `lib/autoRefresh.test.js` (the 5-second tick), and
+`docs-management/documentsRefresh.test.js` (the tree uses it and keeps an
+unchanged tree).
+
+---
+
 ## 2026-10-29 · v1.16.0 · staging only
 
 ### Auto refresh on every data screen, through one shared hook

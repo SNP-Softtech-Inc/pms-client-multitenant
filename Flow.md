@@ -104,13 +104,16 @@ cost a round of investigation in the wrong application.
 ```
 screen ──► useAutoRefresh(quietLoad, { enabled: !dialogOpen })   src/hooks/useAutoRefresh.js
              └─ startAutoRefresh                                   src/lib/autoRefresh.js
-                  every 30s while visible (chat 15s) · at once on return/focus
+                  every 30s while visible (chat 15s, documents tree 5s)
+                  at once on return/focus
                   never overlapping · failure logged, next tick runs
 ```
 
 New data screens should use it with a silent loader and pause while anything
 the client is filling in, signing or paying is open. In DocsFolderTree and
 TrashedDocs it must live in the INNER component - see decisions.md v1.16.0.
+The documents tree uses `QUICK_INTERVAL_MS` (5s) and `keepIfSame` - see
+decisions.md v1.17.0.
 
 ---
 

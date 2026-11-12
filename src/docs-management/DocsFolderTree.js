@@ -15,6 +15,7 @@ import {
 import { EllipsisVertical, Info, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
+import { keepIfSame, QUICK_INTERVAL_MS } from "../lib/autoRefresh";
 import FileUploadDrawer from "./drawers/FileUploadDrawer";
 import CreteFolderDrawer from "./drawers/CreteFolderDrawer";
 import FolderUploadDrawer from "./drawers/FolderUploadDrawer";
@@ -1999,10 +2000,14 @@ const DocsFolderTree = () => {
     // the tree as it is. Paused while anything is open or in progress.
     const refreshTreeQuietly = async () => {
       const res = await accountDocsAPI.clientListFoldersAndFiles(accountId);
-      if (res.data?.contents) setFolderTree(res.data.contents);
+      // keepIfSame: a tick that finds nothing new does not re-render.
+      if (res.data?.contents) setFolderTree(keepIfSame(res.data.contents));
     };
 
     useAutoRefresh(refreshTreeQuietly, {
+      // Every 5 seconds rather than 30: a document the firm uploads should
+      // show up here almost at once.
+      intervalMs: QUICK_INTERVAL_MS,
       enabled:
         Boolean(accountId) &&
         !dialogOpen &&
