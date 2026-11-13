@@ -15,6 +15,10 @@ Package name is `mui-client-dashboard`; it is served under `/client`
 
 **`src/index.js`** → `src/App.js`.
 
+The page shell is `public/index.html`: tab title "SNP Taxes & Financials
+PMS" and `favicon.ico`, the SNP mark (same in both apps; `manifest.json`
+names the installed app the same way).
+
 The provider stack is deliberately much thinner than the admin app's:
 
 ```
