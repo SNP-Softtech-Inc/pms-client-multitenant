@@ -103,6 +103,22 @@ cost a round of investigation in the wrong application.
 
 ---
 
+## Invoices (PMS-116, v1.19.0)
+
+With `REACT_APP_INVOICE_RENDERER=new`, Billing → Invoices row menu:
+
+```
+View     ─► InvoiceViewDialog ─► invoiceAPI.getInvoiceViewHtml(id)
+                                   └─► InvoiceDocumentFrame <iframe sandbox="" srcdoc>
+Download ─► invoiceAPI.getInvoicePdf(id) (blob) ─► downloadBlob
+Print    ─► invoiceAPI.getInvoicePdf(id) (blob) ─► printPdfBlob (prints that PDF)
+```
+
+Any status, Pending included. Unset: older `invoiceDocuments.js` builders,
+Download/Print for Paid only. Helpers: `src/lib/invoiceDocument.js`.
+
+---
+
 ## Auto refresh
 
 ```

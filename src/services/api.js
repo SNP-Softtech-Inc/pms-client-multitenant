@@ -1587,6 +1587,12 @@ export const invoiceAPI = {
       `/account/invoicelist/invoice/invoiceforprint/${id}`
     ),
 
+  // PMS-116: the one invoice template, rendered by invoice-backend.
+  getInvoiceViewHtml: (id) =>
+    invoiceApi.get(`/account/invoicelist/invoice/${id}/view`, { responseType: "text" }),
+  getInvoicePdf: (id) =>
+    invoiceApi.get(`/account/invoicelist/invoice/${id}/pdf`, { responseType: "blob" }),
+
   getNextInvoiceNumber: () =>
     invoiceApi.get("/account/invoicelist/next-invoice-number"),
 

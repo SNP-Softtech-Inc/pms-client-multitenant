@@ -311,6 +311,8 @@ import { useToast } from "../../hooks/useToast";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import logo from "../../Images/snp.png";
 import { buildInvoicePDF, buildInvoicePrintHTML } from "./invoiceDocuments";
+import { isNewInvoiceRenderer, invoiceFilename, downloadBlob, printPdfBlob } from "../../lib/invoiceDocument";
+import InvoiceViewDialog from "./InvoiceViewDialog";
 
 const Invoices = () => {
   const navigate = useNavigate();
@@ -321,6 +323,9 @@ const Invoices = () => {
   const [accountId] = useState(sessionStorage.getItem("accountId"));
   const [menuPos, setMenuPos] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  // PMS-116: the invoice open in the viewer ({ _id, invoicenumber }), if any.
+  const [viewing, setViewing] = useState(null);
+  const newRenderer = isNewInvoiceRenderer();
   const menuRef = useRef(null);
 
   const open = Boolean(menuPos);
@@ -1060,7 +1065,20 @@ const Invoices = () => {
  
 
 // DOWNLOAD
-const handleDownload = async (_id) => {
+const handleDownload = async (_id, invoiceNumber) => {
+  // PMS-116: the server's PDF from the one invoice template.
+  if (newRenderer) {
+    try {
+      const res = await invoiceAPI.getInvoicePdf(_id);
+      downloadBlob(res.data, invoiceFilename(invoiceNumber));
+      toast.success("Invoice downloaded successfully");
+      handleMenuClose();
+    } catch (error) {
+      console.error("Error downloading invoice:", error);
+      toast.error("Failed to download invoice");
+    }
+    return;
+  }
   try {
     const res = await invoiceAPI.getInvoiceForPrint(_id);
     const invoice = res.data.invoice;
@@ -1078,6 +1096,18 @@ const handleDownload = async (_id) => {
 
 // PRINT
 const handlePrint = async (_id) => {
+  // PMS-116: print the same PDF Download gives.
+  if (newRenderer) {
+    try {
+      const res = await invoiceAPI.getInvoicePdf(_id);
+      printPdfBlob(res.data);
+      handleMenuClose();
+    } catch (error) {
+      console.error("Error printing invoice:", error);
+      toast.error("Failed to print invoice");
+    }
+    return;
+  }
   try {
     const res = await invoiceAPI.getInvoiceForPrint(_id);
     const invoice = res.data.invoice;
@@ -1326,11 +1356,25 @@ const handlePrint = async (_id) => {
           }}
           className="w-36 rounded-lg border border-border bg-card shadow-xl text-sm overflow-hidden"
         >
+          {/* PMS-116: view any invoice; with the new renderer, Pending ones
+              can be downloaded and printed too (the email already sends them). */}
+          {newRenderer && (
+            <button
+              className="w-full px-4 py-2.5 text-left text-foreground hover:bg-muted transition-colors"
+              onClick={() => {
+                setViewing({ _id: selectedInvoice._id, invoicenumber: selectedInvoice.invoicenumber });
+                handleMenuClose();
+              }}
+            >
+              View
+            </button>
+          )}
+
           <button
             className="w-full px-4 py-2.5 text-left text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            disabled={selectedInvoice?.invoiceStatus?.toLowerCase() !== "paid"}
+            disabled={!newRenderer && selectedInvoice?.invoiceStatus?.toLowerCase() !== "paid"}
             onClick={() => {
-              handleDownload(selectedInvoice._id);
+              handleDownload(selectedInvoice._id, selectedInvoice.invoicenumber);
               handleMenuClose();
             }}
           >
@@ -1339,7 +1383,7 @@ const handlePrint = async (_id) => {
 
           <button
             className="w-full px-4 py-2.5 text-left text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            disabled={selectedInvoice?.invoiceStatus?.toLowerCase() !== "paid"}
+            disabled={!newRenderer && selectedInvoice?.invoiceStatus?.toLowerCase() !== "paid"}
             onClick={() => {
               handlePrint(selectedInvoice._id);
               handleMenuClose();
@@ -1348,6 +1392,16 @@ const handlePrint = async (_id) => {
             Print
           </button>
         </div>
+      )}
+
+      {viewing && (
+        <InvoiceViewDialog
+          invoiceId={viewing._id}
+          invoiceNumber={viewing.invoicenumber}
+          onClose={() => setViewing(null)}
+          onDownload={() => handleDownload(viewing._id, viewing.invoicenumber)}
+          onPrint={() => handlePrint(viewing._id)}
+        />
       )}
     </div>
   );

@@ -8,6 +8,30 @@ this way?" — not for routine edits. Update it in the same commit as the code.
 
 ---
 
+## 2026-11-24 · v1.19.0 · PMS-116 · not deployed
+
+### Invoices come from invoice-backend's one template
+
+**Asked (PMS-116):** the client sees the same invoice design as the admin
+portal, the email attachment, print and download.
+
+**Decision:** with `REACT_APP_INVOICE_RENDERER=new`:
+- **View** (new menu item) shows `GET /invoice/:id/view` in
+  `<iframe sandbox="" srcdoc>` (`components/InvoiceDocumentFrame.js`): no
+  scripts, unique origin, so the document cannot reach this app or its token.
+- **Download and Print** use the same server PDF (`GET /invoice/:id/pdf`);
+  Print prints that PDF, so the two cannot differ.
+- **Pending invoices can be viewed, downloaded and printed.** They were
+  disabled before (Paid only), yet the client already receives the Pending PDF
+  by email. invoice-backend only returns invoices of the client's own accounts.
+- The print path's email from `sessionStorage` (and its `console.log`) is not
+  used any more; Bill To comes from the server.
+
+**Switch:** unset (default) keeps the older `invoiceDocuments.js` builders and
+the Paid-only buttons exactly as they were.
+
+---
+
 ## 2026-11-13 · v1.18.0 · staging only
 
 ### The browser tab shows the SNP mark and "SNP Taxes & Financials PMS"
