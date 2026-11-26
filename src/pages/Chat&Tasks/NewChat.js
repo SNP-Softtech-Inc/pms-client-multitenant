@@ -36,7 +36,7 @@ const toast = useToast()
         description: [
           {
             message: editorContent,
-            fromwhome: "Client", // ✅ consistent casing
+            fromwhome: "client", // ✅ consistent casing
             senderid: accountName,
             isRead: false,
           },
